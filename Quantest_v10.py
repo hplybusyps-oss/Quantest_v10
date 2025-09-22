@@ -13,38 +13,6 @@ import pickle
 from datetime import datetime, date
 
 
-# def resource_path(relative_path):
-#     """ 실행 파일(.exe) 내부의 리소스 경로를 반환하는 함수 """
-#     try:
-#         base_path = sys._MEIPASS
-#     except Exception:
-#         base_path = os.path.abspath(".")
-#     return os.path.join(base_path, relative_path)
-
-# # 프로그램이 .exe로 실행되었는지 여부를 확인
-# if getattr(sys, 'frozen', False):
-#     # .exe로 실행된 경우, 함께 패키징된 폰트 파일을 사용
-#     font_path = resource_path('malgun.ttf')
-# else:
-#     # 일반 파이썬 스크립트로 실행된 경우, 시스템 경로의 폰트 파일을 사용
-#     font_path = 'c:/Windows/Fonts/malgun.ttf'
-
-# # 폰트 설정
-# try:
-#     prop = font_manager.FontProperties(fname=font_path)
-#     plt.rcParams['font.family'] = prop.get_name()
-# except Exception:
-#     # 위의 경로에서 폰트를 찾지 못할 경우를 대비한 대체 설정
-#     try:
-#         plt.rcParams['font.family'] = 'Malgun Gothic'
-#     except Exception:
-#         # Mac, Linux 등 다른 OS를 위한 설정
-#         try:
-#             plt.rcParams['font.family'] = 'AppleGothic'
-#         except:
-#             plt.rcParams['font.family'] = 'sans-serif'
-
-# plt.rcParams['axes.unicode_minus'] = False  
 
 # --- session_state 초기화 ---
 # 앱이 처음 실행되거나 새로고침될 때 'saved_results' 리스트가 없으면 만들어줍니다.
@@ -665,8 +633,8 @@ if run_button_clicked:
         st.session_state.toast_shown = False       
         st.session_state.result_selector = "--- 새로운 백테스트 실행 ---"
 
-    if 'last_uploaded_file_id' in st.session_state:
-        del st.session_state['last_uploaded_file_id']
+    # if 'last_uploaded_file_id' in st.session_state:
+    #     del st.session_state['last_uploaded_file_id']
 
     st.rerun()        
 
@@ -1343,5 +1311,6 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
