@@ -18,31 +18,31 @@ from datetime import datetime, date
 if 'saved_results' not in st.session_state:
     st.session_state.saved_results = []
     
-# --- 웹/로컬 통합 한글 폰트 설정 ---
+# # --- 웹/로컬 통합 한글 폰트 설정 ---
 
-# 1. 폰트 파일의 경로를 설정합니다.
-#    스크립트와 같은 폴더에 'malgun.ttf' 폰트 파일이 있어야 합니다.
-font_name = 'malgun.ttf' 
+# # 1. 폰트 파일의 경로를 설정합니다.
+# #    스크립트와 같은 폴더에 'malgun.ttf' 폰트 파일이 있어야 합니다.
+# font_name = 'malgun.ttf' 
 
-# __file__은 현재 실행 중인 스크립트의 전체 경로를 의미합니다.
-# 이를 통해 어떤 환경에서든 폰트 파일의 정확한 위치를 찾을 수 있습니다.
-font_path = os.path.join(os.path.dirname(__file__), font_name)
+# # __file__은 현재 실행 중인 스크립트의 전체 경로를 의미합니다.
+# # 이를 통해 어떤 환경에서든 폰트 파일의 정확한 위치를 찾을 수 있습니다.
+# font_path = os.path.join(os.path.dirname(__file__), font_name)
 
-# 2. 폰트 파일이 실제로 존재하는지 확인합니다.
-if os.path.exists(font_path):
-    # 3. Matplotlib의 폰트 목록에 해당 폰트를 추가합니다.
-    fm.fontManager.addfont(font_path)
+# # 2. 폰트 파일이 실제로 존재하는지 확인합니다.
+# if os.path.exists(font_path):
+#     # 3. Matplotlib의 폰트 목록에 해당 폰트를 추가합니다.
+#     fm.fontManager.addfont(font_path)
     
-    # 4. 추가된 폰트를 Matplotlib의 기본 글꼴로 설정합니다.
-    font_prop = fm.FontProperties(fname=font_path)
-    plt.rc('font', family=font_prop.get_name())
-else:
-    # 폰트 파일이 없을 경우 경고 메시지를 출력하고, 시스템 기본 폰트를 시도합니다.
-    print(f"경고: 폰트 파일 '{font_name}'을(를) 찾을 수 없습니다. 시스템 폰트를 사용합니다.")
-    plt.rc('font', family='Malgun Gothic') # Windows 사용자를 위한 대비책
+#     # 4. 추가된 폰트를 Matplotlib의 기본 글꼴로 설정합니다.
+#     font_prop = fm.FontProperties(fname=font_path)
+#     plt.rc('font', family=font_prop.get_name())
+# else:
+#     # 폰트 파일이 없을 경우 경고 메시지를 출력하고, 시스템 기본 폰트를 시도합니다.
+#     print(f"경고: 폰트 파일 '{font_name}'을(를) 찾을 수 없습니다. 시스템 폰트를 사용합니다.")
+#     plt.rc('font', family='Malgun Gothic') # Windows 사용자를 위한 대비책
 
-# 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
-plt.rc('axes', unicode_minus=False)     
+# # 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
+# plt.rc('axes', unicode_minus=False)     
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -1308,4 +1308,5 @@ st.markdown(
     <div class="watermark">Dev.HJPark</div>
     """,
     unsafe_allow_html=True
+
 )
