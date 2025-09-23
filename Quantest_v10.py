@@ -44,6 +44,21 @@ else:
 
 # 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
 plt.rc('axes', unicode_minus=False)     
+
+# =============================================================================
+#           [추가] 사이드바 버튼 스타일 변경을 위한 CSS
+# =============================================================================
+st.markdown("""
+<style>
+/* 사이드바의 'CSV 티커 관리' expander 내부의 버튼에만 스타일 적용 */
+[data-testid="stSidebar"] [data-testid="stExpander"] button {
+    font-size: 13px;      /* 버튼의 글씨 크기를 13px로 설정 */
+    height: 32px;         /* 버튼의 세로 높이를 살짝 줄여줍니다 */
+    padding: 5px 12px;    /* 내부 여백을 조절합니다 */
+}
+</style>
+""", unsafe_allow_html=True)
+
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -241,8 +256,8 @@ with st.sidebar.expander("티커 관리"):
     st.markdown("###### 신규 티커 추가")
 
     with st.form(key='add_ticker_form', clear_on_submit=True):
-        new_ticker = st.text_input("추가할 티커 (예: AAPL)").strip().upper()
-        new_name = st.text_input("추가할 주식/ETF 이름 (예: Apple Inc)").strip()
+        new_ticker = st.text_input("추가할 티커 (예: TSLA)").strip().upper()
+        new_name = st.text_input("추가할 주식/ETF 이름 (예: Tesla Inc.)").strip()
         
         submitted = st.form_submit_button("티커 추가하기")
         if submitted:
@@ -1422,6 +1437,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
