@@ -50,13 +50,13 @@ plt.rc('axes', unicode_minus=False)
 # =============================================================================
 st.markdown("""
 <style>
-/* 사이드바의 'CSV 티커 관리' expander 내부의 버튼에만 스타일 적용 */
-[data-testid="stSidebar"] [data-testid="stExpander"] button {
-    font-size: 13px;
+/* 사용자 정의 클래스 '.full-width-button' 내부의 버튼에 스타일 적용 */
+.full-width-button > button {
+    width: 100%;
+    text-align: center;
+    font-size: 5px;
     height: 32px;
     padding: 5px 12px;
-    width: 100%;
-    text-align: center; 
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1437,6 +1437,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
