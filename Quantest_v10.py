@@ -52,8 +52,8 @@ st.markdown("""
 <style>
 /* 사이드바의 'CSV 티커 관리' expander 내부의 버튼에만 스타일 적용 */
 [data-testid="stSidebar"] [data-testid="stExpander"] button {
-    font-size: 13px;      /* 버튼의 글씨 크기를 13px로 설정 */
-    height: 32px;         /* 버튼의 세로 높이를 살짝 줄여줍니다 */
+    font-size: 10px;      /* 버튼의 글씨 크기를 13px로 설정 */
+    height: 30px;         /* 버튼의 세로 높이를 살짝 줄여줍니다 */
     padding: 5px 12px;    /* 내부 여백을 조절합니다 */
 }
 </style>
@@ -1437,6 +1437,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
