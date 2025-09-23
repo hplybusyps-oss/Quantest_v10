@@ -208,15 +208,21 @@ with st.sidebar.expander("티커 관리"):
         submitted = st.form_submit_button("티커 추가하기")
         if submitted:
             if new_ticker and new_name:
-                df_for_check = current_stocks_df if current_stocks_df is not None else pd.DataFrame(columns=['Ticker'])
+                # --- [수정] 파일 경로를 먼저 찾습니다 ---
+                if getattr(sys, 'frozen', False):
+                    application_path = os.path.dirname(sys.executable)
+                else:
+                    application_path = os.path.dirname(os.path.abspath(__file__))
+                csv_path = os.path.join(application_path, 'Stock_list.csv')
+
+                # --- [수정] 캐시가 아닌, 실제 파일을 직접 읽어 중복을 확인합니다 ---
+                try:
+                    df_from_disk = pd.read_csv(csv_path, encoding='cp949')
+                except FileNotFoundError:
+                    df_from_disk = pd.DataFrame(columns=['Ticker'])
                 
-                if new_ticker not in df_for_check['Ticker'].str.upper().values:
-                    if getattr(sys, 'frozen', False):
-                        application_path = os.path.dirname(sys.executable)
-                    else:
-                        application_path = os.path.dirname(os.path.abspath(__file__))
-                    csv_path = os.path.join(application_path, 'Stock_list.csv')
-                    
+                if new_ticker not in df_from_disk['Ticker'].str.upper().values:
+                    # --- (이하 파일에 추가하는 로직은 동일) ---
                     try:
                         import csv
                         file_exists = os.path.exists(csv_path)
@@ -1413,6 +1419,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
