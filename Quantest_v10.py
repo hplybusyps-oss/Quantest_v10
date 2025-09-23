@@ -187,60 +187,92 @@ risk_free_rate = st.sidebar.slider(
 )
 
 # =============================================================================
-#           [추가] 사이드바에 'CSV 티커 관리' 기능 추가
+#           [추가] 사이드바에 '티커 관리' 기능 추가
 # =============================================================================
 with st.sidebar.expander("티커 관리"):
-    # 현재 CSV 파일의 내용을 데이터프레임으로 보여줍니다.
     st.markdown("###### 현재 Stock_list.csv 내용")
     
-    # 기존 함수를 재활용하여 데이터를 불러옵니다.
     current_stocks_df = load_Stock_list()
-    if current_stocks_df is not None:
-        # st.dataframe을 사용하면 표 높이를 조절할 수 있습니다.
+    if current_stocks_df is not None and not current_stocks_df.empty:
         st.dataframe(current_stocks_df, height=100)
-    else:
-        st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
 
-    st.markdown("---")
-    st.markdown("###### 신규 티커 추가")
-
-    # 폼(form)을 사용하여 입력 필드와 버튼을 그룹화합니다.
-    # 이렇게 하면 Enter를 눌러도 페이지 전체가 새로고침되지 않고, 버튼을 눌렀을 때만 작동합니다.
-    with st.form(key='add_ticker_form', clear_on_submit=True):
-        new_ticker = st.text_input("추가할 티커 (예: AAPL)").strip().upper()
-        new_name = st.text_input("추가할 주식/ETF 이름 (예: Apple Inc.)").strip()
+        # --- [추가] 티커 삭제 기능 ---
+        st.markdown("---")
+        st.markdown("###### 기존 티커 삭제")
         
-        # '티커 추가하기' 버튼
-        submitted = st.form_submit_button("티커 추가하기")
-
-        if submitted:
-            # 1. 유효성 검사: 티커와 이름이 모두 입력되었는지 확인
-            if new_ticker and new_name:
-                # 2. 중복 검사: 이미 존재하는 티커인지 확인 (대소문자 무시)
-                if current_stocks_df is None or new_ticker not in current_stocks_df['Ticker'].str.upper().values:
+        # 삭제할 티커를 선택하는 멀티셀렉트 박스
+        tickers_to_delete = st.multiselect(
+            "삭제할 티커를 선택하세요.",
+            options=current_stocks_df['Ticker'].tolist()
+        )
+        
+        if st.button("선택한 티커 삭제하기"):
+            if tickers_to_delete:
+                try:
+                    # 1. 삭제할 티커를 제외한 나머지 데이터만 남깁니다.
+                    updated_df = current_stocks_df[~current_stocks_df['Ticker'].isin(tickers_to_delete)]
                     
-                    # 3. 파일 경로 찾기 (load_Stock_list 함수와 동일한 로직 사용)
+                    # 2. 파일 경로를 찾습니다.
                     if getattr(sys, 'frozen', False):
                         application_path = os.path.dirname(sys.executable)
                     else:
                         application_path = os.path.dirname(os.path.abspath(__file__))
                     csv_path = os.path.join(application_path, 'Stock_list.csv')
 
-                    # 4. CSV 파일에 새로운 행 추가 (append 모드)
+                    # 3. 수정된 데이터프레임을 CSV 파일에 덮어씁니다.
+                    updated_df.to_csv(csv_path, index=False, encoding='cp949')
+                    
+                    st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")
+                    
+                    # 4. 변경사항을 즉시 반영합니다.
+                    load_Stock_list.clear()
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"파일 수정 중 오류 발생: {e}")
+            else:
+                st.warning("삭제할 티커를 먼저 선택해주세요.")
+        # --- 삭제 기능 끝 ---
+
+    else:
+        st.info("Stock_list.csv 파일이 비어있거나 찾을 수 없습니다.")
+
+    st.markdown("---")
+    st.markdown("###### 신규 티커 추가")
+
+    with st.form(key='add_ticker_form', clear_on_submit=True):
+        new_ticker = st.text_input("추가할 티커 (예: AAPL)").strip().upper()
+        new_name = st.text_input("추가할 주식/ETF 이름 (예: Apple Inc)").strip()
+        
+        submitted = st.form_submit_button("티커 추가하기")
+        if submitted:
+            if new_ticker and new_name:
+                # current_stocks_df가 None일 경우를 대비하여 빈 데이터프레임으로 초기화
+                df_for_check = current_stocks_df if current_stocks_df is not None else pd.DataFrame(columns=['Ticker'])
+                
+                if new_ticker not in df_for_check['Ticker'].str.upper().values:
+                    if getattr(sys, 'frozen', False):
+                        application_path = os.path.dirname(sys.executable)
+                    else:
+                        application_path = os.path.dirname(os.path.abspath(__file__))
+                    csv_path = os.path.join(application_path, 'Stock_list.csv')
+                    
                     try:
+                        import csv
+                        # 파일이 없을 경우 헤더를 추가하기 위해 'a' 대신 'w' 모드와 os.path.exists를 확인
+                        file_exists = os.path.exists(csv_path)
                         with open(csv_path, 'a', newline='', encoding='cp949') as f:
-                            # 콤마(,)가 포함된 이름을 처리하기 위해 csv 라이브러리 사용
-                            import csv
                             writer = csv.writer(f)
+                            # 파일이 새로 생성되는 경우에만 헤더 작성
+                            if not file_exists or os.path.getsize(csv_path) == 0:
+                                writer.writerow(['Ticker', 'Name'])
                             writer.writerow([new_ticker, new_name])
                         
-                        # 5. 실시간 새로고침
                         st.success(f"'{new_name}' ({new_ticker}) 추가 완료!")
-                        load_Stock_list.clear() # 캐시 지우기
-                        st.rerun() # 앱 새로고침
+                        load_Stock_list.clear()
+                        st.rerun()
                     except Exception as e:
                         st.error(f"파일 쓰기 중 오류 발생: {e}")
-
                 else:
                     st.error(f"'{new_ticker}'는 이미 존재하는 티커입니다.")
             else:
@@ -1390,6 +1422,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
