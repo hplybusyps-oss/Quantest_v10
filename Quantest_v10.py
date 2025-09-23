@@ -186,6 +186,66 @@ risk_free_rate = st.sidebar.slider(
     help="**샤프 지수(Sharpe Ratio) 계산**에 사용되는 무위험 수익률입니다. 일반적으로 미국 단기 국채 금리를 사용하며, 연 수익률 기준으로 입력합니다."
 )
 
+# =============================================================================
+#           [추가] 사이드바에 'CSV 티커 관리' 기능 추가
+# =============================================================================
+with st.sidebar.expander(" GCSV 티커 관리"):
+    # 현재 CSV 파일의 내용을 데이터프레임으로 보여줍니다.
+    st.markdown("###### 현재 Stock_list.csv 내용")
+    
+    # 기존 함수를 재활용하여 데이터를 불러옵니다.
+    current_stocks_df = load_Stock_list()
+    if current_stocks_df is not None:
+        # st.dataframe을 사용하면 표 높이를 조절할 수 있습니다.
+        st.dataframe(current_stocks_df, height=200)
+    else:
+        st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
+
+    st.markdown("---")
+    st.markdown("###### 신규 티커 추가")
+
+    # 폼(form)을 사용하여 입력 필드와 버튼을 그룹화합니다.
+    # 이렇게 하면 Enter를 눌러도 페이지 전체가 새로고침되지 않고, 버튼을 눌렀을 때만 작동합니다.
+    with st.form(key='add_ticker_form', clear_on_submit=True):
+        new_ticker = st.text_input("추가할 티커 (예: AAPL)").strip().upper()
+        new_name = st.text_input("추가할 주식/ETF 이름 (예: Apple Inc)").strip()
+        
+        # '티커 추가하기' 버튼
+        submitted = st.form_submit_button("티커 추가하기")
+
+        if submitted:
+            # 1. 유효성 검사: 티커와 이름이 모두 입력되었는지 확인
+            if new_ticker and new_name:
+                # 2. 중복 검사: 이미 존재하는 티커인지 확인 (대소문자 무시)
+                if current_stocks_df is None or new_ticker not in current_stocks_df['Ticker'].str.upper().values:
+                    
+                    # 3. 파일 경로 찾기 (load_Stock_list 함수와 동일한 로직 사용)
+                    if getattr(sys, 'frozen', False):
+                        application_path = os.path.dirname(sys.executable)
+                    else:
+                        application_path = os.path.dirname(os.path.abspath(__file__))
+                    csv_path = os.path.join(application_path, 'Stock_list.csv')
+
+                    # 4. CSV 파일에 새로운 행 추가 (append 모드)
+                    try:
+                        with open(csv_path, 'a', newline='', encoding='cp949') as f:
+                            # 콤마(,)가 포함된 이름을 처리하기 위해 csv 라이브러리 사용
+                            import csv
+                            writer = csv.writer(f)
+                            writer.writerow([new_ticker, new_name])
+                        
+                        # 5. 실시간 새로고침
+                        st.success(f"'{new_name}' ({new_ticker}) 추가 완료!")
+                        load_Stock_list.clear() # 캐시 지우기
+                        st.rerun() # 앱 새로고침
+                    except Exception as e:
+                        st.error(f"파일 쓰기 중 오류 발생: {e}")
+
+                else:
+                    st.error(f"'{new_ticker}'는 이미 존재하는 티커입니다.")
+            else:
+                st.warning("티커와 이름을 모두 입력해주세요.")
+
 st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
@@ -1330,6 +1390,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
