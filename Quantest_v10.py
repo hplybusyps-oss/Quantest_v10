@@ -189,7 +189,7 @@ risk_free_rate = st.sidebar.slider(
 # =============================================================================
 #           [추가] 사이드바에 'CSV 티커 관리' 기능 추가
 # =============================================================================
-with st.sidebar.expander(" GCSV 티커 관리"):
+with st.sidebar.expander("티커 관리"):
     # 현재 CSV 파일의 내용을 데이터프레임으로 보여줍니다.
     st.markdown("###### 현재 Stock_list.csv 내용")
     
@@ -197,7 +197,7 @@ with st.sidebar.expander(" GCSV 티커 관리"):
     current_stocks_df = load_Stock_list()
     if current_stocks_df is not None:
         # st.dataframe을 사용하면 표 높이를 조절할 수 있습니다.
-        st.dataframe(current_stocks_df, height=200)
+        st.dataframe(current_stocks_df, height=100)
     else:
         st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
 
@@ -208,7 +208,7 @@ with st.sidebar.expander(" GCSV 티커 관리"):
     # 이렇게 하면 Enter를 눌러도 페이지 전체가 새로고침되지 않고, 버튼을 눌렀을 때만 작동합니다.
     with st.form(key='add_ticker_form', clear_on_submit=True):
         new_ticker = st.text_input("추가할 티커 (예: AAPL)").strip().upper()
-        new_name = st.text_input("추가할 주식/ETF 이름 (예: Apple Inc)").strip()
+        new_name = st.text_input("추가할 주식/ETF 이름 (예: Apple Inc.)").strip()
         
         # '티커 추가하기' 버튼
         submitted = st.form_submit_button("티커 추가하기")
@@ -1390,6 +1390,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
