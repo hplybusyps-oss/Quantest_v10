@@ -811,6 +811,25 @@ with tab1:
                               color='grey', linewidth=1.0)
                 ax_price.set_ylabel(f'{benchmark_ticker} 가격', fontsize=12)
                 ax_price.tick_params(axis='y')
+
+                # --- [추가] 카나리아 모멘텀이 0 이상인 구간에 배경 음영 추가 ---
+                # 1. 모멘텀이 0 이상인 구간을 True, 아니면 False로 표시
+                is_positive = canary_momentum >= 0
+                # 2. True인 구간들의 시작과 끝을 찾아 axvspan으로 배경색을 칠함
+                start_date = None
+                for i in range(len(is_positive)):
+                    # 현재 시점에 0 이상이고, 이전 시점에는 0 미만이었거나 첫 시작이면 -> 상승 구간 시작
+                    if is_positive[i] and (i == 0 or not is_positive[i-1]):
+                        start_date = canary_momentum.index[i]
+                    # 현재 시점에 0 미만이고, 이전 시점에 0 이상이었으면 -> 상승 구간 끝
+                    elif not is_positive[i] and (i > 0 and is_positive[i-1]) and start_date:
+                        end_date = canary_momentum.index[i]
+                        ax_mom.axvspan(start_date, end_date, facecolor='lightgreen', alpha=0.3)
+                        start_date = None
+                # 마지막까지 상승 구간이 이어졌을 경우 처리
+                if start_date:
+                    ax_mom.axvspan(start_date, canary_momentum.index[-1], facecolor='lightgreen', alpha=0.3)
+                # --- 추가 로직 끝 ---   
         
                 ax_mom.axhline(0, color='red', linestyle=':', linewidth=1.0)
                 ax_mom.set_title('카나리아 모멘텀 vs. 벤치마크 가격', fontsize=16)
@@ -1311,6 +1330,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
