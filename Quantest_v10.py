@@ -192,50 +192,12 @@ with st.sidebar.expander("티커 관리"):
     st.markdown("###### 현재 Stock_list.csv 내용")
     
     current_stocks_df = load_Stock_list()
-    if current_stocks_df is not None and not current_stocks_df.empty:
+    if current_stocks_df is not None:
         st.dataframe(current_stocks_df, height=100)
-
-        # --- [추가] 티커 삭제 기능 ---
-        st.markdown("---")
-        st.markdown("###### 기존 티커 삭제")
-        
-        # 삭제할 티커를 선택하는 멀티셀렉트 박스
-        tickers_to_delete = st.multiselect(
-            "삭제할 티커를 선택하세요.",
-            options=current_stocks_df['Ticker'].tolist()
-        )
-        
-        if st.button("티커 삭제하기"):
-            if tickers_to_delete:
-                try:
-                    # 1. 삭제할 티커를 제외한 나머지 데이터만 남깁니다.
-                    updated_df = current_stocks_df[~current_stocks_df['Ticker'].isin(tickers_to_delete)]
-                    
-                    # 2. 파일 경로를 찾습니다.
-                    if getattr(sys, 'frozen', False):
-                        application_path = os.path.dirname(sys.executable)
-                    else:
-                        application_path = os.path.dirname(os.path.abspath(__file__))
-                    csv_path = os.path.join(application_path, 'Stock_list.csv')
-
-                    # 3. 수정된 데이터프레임을 CSV 파일에 덮어씁니다.
-                    updated_df.to_csv(csv_path, index=False, encoding='cp949')
-                    
-                    st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")
-                    
-                    # 4. 변경사항을 즉시 반영합니다.
-                    load_Stock_list.clear()
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"파일 수정 중 오류 발생: {e}")
-            else:
-                st.warning("삭제할 티커를 먼저 선택해주세요.")
-        # --- 삭제 기능 끝 ---
-
     else:
-        st.info("Stock_list.csv 파일이 비어있거나 찾을 수 없습니다.")
+        st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
 
+    # --- [순서 변경] 1. 신규 티커 추가 ---
     st.markdown("---")
     st.markdown("###### 신규 티커 추가")
 
@@ -246,7 +208,6 @@ with st.sidebar.expander("티커 관리"):
         submitted = st.form_submit_button("티커 추가하기")
         if submitted:
             if new_ticker and new_name:
-                # current_stocks_df가 None일 경우를 대비하여 빈 데이터프레임으로 초기화
                 df_for_check = current_stocks_df if current_stocks_df is not None else pd.DataFrame(columns=['Ticker'])
                 
                 if new_ticker not in df_for_check['Ticker'].str.upper().values:
@@ -258,11 +219,9 @@ with st.sidebar.expander("티커 관리"):
                     
                     try:
                         import csv
-                        # 파일이 없을 경우 헤더를 추가하기 위해 'a' 대신 'w' 모드와 os.path.exists를 확인
                         file_exists = os.path.exists(csv_path)
                         with open(csv_path, 'a', newline='', encoding='cp949') as f:
                             writer = csv.writer(f)
-                            # 파일이 새로 생성되는 경우에만 헤더 작성
                             if not file_exists or os.path.getsize(csv_path) == 0:
                                 writer.writerow(['Ticker', 'Name'])
                             writer.writerow([new_ticker, new_name])
@@ -276,6 +235,39 @@ with st.sidebar.expander("티커 관리"):
                     st.error(f"'{new_ticker}'는 이미 존재하는 티커입니다.")
             else:
                 st.warning("티커와 이름을 모두 입력해주세요.")
+
+    # --- [순서 변경] 2. 기존 티커 삭제 ---
+    if current_stocks_df is not None and not current_stocks_df.empty:
+        st.markdown("---")
+        st.markdown("###### 기존 티커 삭제")
+        
+        tickers_to_delete = st.multiselect(
+            "삭제할 티커를 선택하세요.",
+            options=current_stocks_df['Ticker'].tolist()
+        )
+        
+        if st.button("티커 삭제하기"):
+            if tickers_to_delete:
+                try:
+                    updated_df = current_stocks_df[~current_stocks_df['Ticker'].isin(tickers_to_delete)]
+                    
+                    if getattr(sys, 'frozen', False):
+                        application_path = os.path.dirname(sys.executable)
+                    else:
+                        application_path = os.path.dirname(os.path.abspath(__file__))
+                    csv_path = os.path.join(application_path, 'Stock_list.csv')
+
+                    updated_df.to_csv(csv_path, index=False, encoding='cp949')
+                    
+                    st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")
+                    
+                    load_Stock_list.clear()
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"파일 수정 중 오류 발생: {e}")
+            else:
+                st.warning("삭제할 티커를 먼저 선택해주세요.")
 
 st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
@@ -1421,6 +1413,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
