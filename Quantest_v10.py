@@ -12,7 +12,21 @@ import os
 import pickle
 from datetime import datetime, date
 
-
+# =============================================================================
+#           [수정] 사이드바 버튼 스타일 변경을 위한 CSS
+# =============================================================================
+st.markdown("""
+<style>
+/* 사용자 정의 클래스 '.full-width-button' 내부의 버튼에 스타일 적용 */
+.full-width-button > button {
+    width: 100%;
+    text-align: center;
+    font-size: 13px;
+    height: 32px;
+    padding: 5px 12px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # --- session_state 초기화 ---
 # 앱이 처음 실행되거나 새로고침될 때 'saved_results' 리스트가 없으면 만들어줍니다.
@@ -45,21 +59,7 @@ else:
 # 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
 plt.rc('axes', unicode_minus=False)     
 
-# =============================================================================
-#           [수정] 사이드바 버튼 스타일 변경을 위한 CSS
-# =============================================================================
-st.markdown("""
-<style>
-/* 사용자 정의 클래스 '.full-width-button' 내부의 버튼에 스타일 적용 */
-.full-width-button > button {
-    width: 100%;
-    text-align: center;
-    font-size: 5px;
-    height: 32px;
-    padding: 5px 12px;
-}
-</style>
-""", unsafe_allow_html=True)
+
 
 # -----------------------------------------------------------------------------
 # 1. GUI 화면 구성 (Streamlit)
@@ -1437,6 +1437,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
