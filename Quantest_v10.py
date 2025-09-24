@@ -176,6 +176,17 @@ rebalance_day_help = """
 """
 rebalance_day = st.sidebar.radio("리밸런싱 기준일", ('월말', '월초'), index=0, help=rebalance_day_help)
 
+price_basis = st.sidebar.radio(
+    "가격 기준",
+    ('수정 종가', '종가'),
+    index=0,
+    help="""
+    백테스트에 사용할 가격 기준을 선택합니다.
+    - **수정 종가**: 배당 수익이 재투자된 것으로 가정하여 총수익률을 계산합니다. (일반적으로 추천)
+    - **종가**: 순수한 주가 변동만을 기준으로 계산합니다.
+    """
+)
+
 transaction_cost = st.sidebar.slider(
     "거래 비용 (%)", 0.0, 1.0, 0.1, 0.01,
     help="매수 또는 매도 시 발생하는 **거래 비용(수수료, 슬리피지 등)을 시뮬레이션**합니다. 입력된 값은 편도(one-way) 기준입니다."
@@ -346,6 +357,7 @@ def gather_current_config():
         'monthly_contribution': monthly_contribution, 'benchmark': benchmark_ticker,
         'backtest_type': backtest_type, 'rebalance_freq': rebalance_freq, 'rebalance_day': rebalance_day,
         'transaction_cost': transaction_cost / 100, 'risk_free_rate': risk_free_rate / 100,
+        'price_basis': price_basis,
         'tickers': {'AGGRESSIVE': aggressive_tickers, 'DEFENSIVE': defensive_tickers, 'CANARY': canary_tickers},
         'momentum_params': {'type': momentum_type, 'periods': momentum_periods},
         'portfolio_params': {'use_canary': use_canary, 'use_hybrid_protection': use_hybrid_protection,
@@ -374,12 +386,21 @@ else:
 # 2. 백엔드 로직 (데이터 처리 및 백테스트)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def get_price_data(tickers, start, end):
+def get_price_data(tickers, start, end, price_basis):
     try:
         raw_data = yf.download(tickers, start=start, end=end, progress=False)
         if raw_data.empty: st.error("데이터를 다운로드하지 못했습니다."); return None, None, None
 
-        prices = raw_data['Close'].copy()
+        # --- [수정] price_basis 값에 따라 사용할 가격 컬럼을 결정 ---
+        price_column = 'Adj Close' if price_basis == '수정 종가 (배당금 반영)' else 'Close'
+        
+        # 해당 컬럼이 데이터에 존재하는지 확인
+        if price_column not in raw_data:
+            st.warning(f"'{price_column}' 데이터를 찾을 수 없어 'Close' 데이터로 대체합니다.")
+            price_column = 'Close'
+
+        prices = raw_data[price_column].copy()
+        
         prices.dropna(axis=0, how='all', inplace=True)
         
         successful_tickers = [t for t in tickers if t in prices.columns and not prices[t].isnull().all()]
@@ -626,7 +647,13 @@ if run_button_clicked:
     
     
     with st.spinner('데이터 로딩 및 백테스트 실행 중...'):
-        prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, config['start_date'], config['end_date'])
+        # --- [수정] 함수를 호출할 때 price_basis 인자를 추가 ---
+        prices, failed_tickers, culprit_tickers = get_price_data(
+            all_tickers, 
+            config['start_date'], 
+            config['end_date'],
+            config['price_basis'] # config 딕셔너리에 이 값을 추가해야 함
+        )
         
         if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
@@ -1426,6 +1453,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
