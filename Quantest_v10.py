@@ -376,19 +376,26 @@ else:
 @st.cache_data(ttl=3600)
 def get_price_data(tickers, start, end):
     try:
-        raw_data = yf.download(tickers, start=start, end=end, progress=False)
+        # --- [수정] auto_adjust=False 옵션을 추가합니다 ---
+        raw_data = yf.download(
+            tickers, 
+            start=start, 
+            end=end, 
+            progress=False,
+            auto_adjust=False  # 이 옵션을 추가하면 'Adj Close' 컬럼이 포함됩니다.
+        )
+        
         if raw_data.empty: 
             st.error("데이터를 다운로드하지 못했습니다."); 
             return None, None, None
 
-        # 1. 'Adj Close'가 있는지 먼저 확인하고, 그에 따라 prices 변수를 정의합니다.
+        # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
         if 'Adj Close' in raw_data.columns:
             prices = raw_data['Adj Close'].copy()
         else:
             st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
             prices = raw_data['Close'].copy()
         
-        # 2. 정의된 prices 변수에 대해 dropna를 한 번만 실행합니다.
         prices.dropna(axis=0, how='all', inplace=True)
         
         successful_tickers = [t for t in tickers if t in prices.columns and not prices[t].isnull().all()]
@@ -1435,6 +1442,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
