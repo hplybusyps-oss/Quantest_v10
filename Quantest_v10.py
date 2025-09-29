@@ -819,7 +819,7 @@ with tab1:
             st.json(display_config)
         
 
-        st.header("2. 데이터 로딩 정보")
+        st.header("1. 데이터 로딩 정보")
         actual_start_date_str = prices.index[0].strftime('%Y-%m-%d')
         requested_start_date_str = pd.to_datetime(config['start_date']).strftime('%Y-%m-%d')
 
@@ -863,10 +863,10 @@ with tab1:
         display_df.columns = new_column_names
         st.dataframe(display_df.style.format("{:,.0f}"))
 
-        st.header("3. 백테스트 결과")
+        st.header("2. 시그널 모멘텀")
         
         # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
-        st.subheader(" 카나리아 모멘텀 추이 vs. 벤치마크 가격")
+        st.subheader("📊 카나리아 모멘텀 추이 vs. 벤치마크 가격")
         
         # 1. 필요한 데이터 가져오기
         prices = results.get('prices')
@@ -956,7 +956,7 @@ with tab1:
             else:
                 st.warning("카나리아 또는 벤치마크 자산 데이터를 찾을 수 없습니다.")
 
-        # --- [추가] 구성종목 모멘텀 점수 그래프 및 데이터 ---
+        # --- [수정] 구성종목 모멘텀 점수 그래프 및 데이터 ---
         st.subheader("📊 구성종목 모멘텀 점수")
 
         # 1. 결과에서 필요한 데이터 추출
@@ -973,14 +973,26 @@ with tab1:
                 scores_to_display = momentum_scores[assets_to_show]
 
                 # 3. 데이터 테이블 (펼치기/접기)
-                with st.expander("모멘텀 점수 상세 데이터 보기"):
-                    st.dataframe(scores_to_display.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
+                    # --- ▼▼▼ 데이터 필터링 및 정렬 로직 추가 ▼▼▼ ---
+                    # 1. 가장 최근 날짜로부터 12개월 이전 날짜를 계산
+                    end_date = scores_to_display.index.max()
+                    start_date = end_date - pd.DateOffset(months=12)
+                    
+                    # 2. 최근 12개월 데이터만 필터링
+                    recent_scores = scores_to_display[scores_to_display.index >= start_date]
+                    
+                    # 3. 날짜를 내림차순으로 정렬 (최신 날짜가 위로)
+                    sorted_recent_scores = recent_scores.sort_index(ascending=False)
+                    
+                    # 4. 필터링되고 정렬된 데이터를 테이블에 표시
+                    st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                    # --- ▲▲▲ 로직 추가 끝 ▲▲▲ ---
 
-                # 4. 모멘텀 점수 그래프
+                # 4. 모멘텀 점수 그래프 (그래프는 전체 기간을 표시하므로 수정 없음)
                 fig_assets, ax_assets = plt.subplots(figsize=(10, 5))
 
                 for ticker in scores_to_display.columns:
-                    # 각 자산의 색상을 다르게 하여 그래프 그리기
                     ax_assets.plot(scores_to_display.index, scores_to_display[ticker], label=ticker, linewidth=1.0, alpha=0.8)
                 
                 ax_assets.axhline(0, color='red', linestyle=':', linewidth=1.0)
@@ -988,7 +1000,7 @@ with tab1:
                 ax_assets.set_xlabel('날짜', fontsize=12)
                 ax_assets.set_ylabel('모멘텀 점수', fontsize=12)
                 ax_assets.grid(True, which="both", ls="--", linewidth=0.5)
-                ax_assets.legend(loc='upper left', ncol=2) # 범례가 많을 경우 2줄로 표시
+                ax_assets.legend(loc='upper left', ncol=2)
 
                 st.pyplot(fig_assets)
             else:
@@ -996,6 +1008,7 @@ with tab1:
         else:
             st.warning("모멘텀 점수 데이터를 결과 파일에서 찾을 수 없습니다.")
 
+        st.header("3. 백테스트 결과")        
         
         if config['monthly_contribution'] > 0:
             with st.expander("💡 적립식 투자 결과, 어떻게 해석해야 할까요? (클릭하여 보기)"):
@@ -1482,6 +1495,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
