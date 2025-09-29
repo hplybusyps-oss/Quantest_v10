@@ -987,9 +987,19 @@ with tab1:
                     recent_scores = scores_to_display[scores_to_display.index >= start_date]
                     sorted_recent_scores = recent_scores.sort_index(ascending=False)
                     
-                    # 비어있는 테이블에 스타일 적용 시 발생하는 KeyError 방지
                     if not sorted_recent_scores.empty:
-                        st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                        # --- ▼▼▼ 테이블 컬럼 이름 변경 로직 추가 ▼▼▼ ---
+                        df_to_display = sorted_recent_scores.copy()
+                        
+                        # Stock_list.csv 정보가 있을 경우, 컬럼 이름을 전체 이름으로 변경
+                        if etf_df is not None:
+                            # Ticker를 키로, Name을 값으로 하는 딕셔너리 생성
+                            ticker_to_name_map = pd.Series(etf_df.Name.values, index=etf_df.Ticker).to_dict()
+                            df_to_display.rename(columns=ticker_to_name_map, inplace=True)
+
+                        # 이름이 변경된 데이터프레임을 화면에 표시
+                        st.dataframe(df_to_display.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                        # --- ▲▲▲ 로직 추가 끝 ▲▲▲ ---
                     else:
                         st.dataframe(sorted_recent_scores)
 
@@ -1521,6 +1531,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
