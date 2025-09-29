@@ -1,4 +1,5 @@
 import streamlit as st
+st.error("!!! 코드 버전 V2가 성공적으로 배포되었습니다 !!!")
 import yfinance as yf
 import pandas as pd
 import sys
@@ -1505,6 +1506,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
