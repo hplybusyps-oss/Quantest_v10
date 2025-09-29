@@ -973,13 +973,21 @@ with tab1:
             if assets_to_show:
                 scores_to_display = momentum_scores[assets_to_show]
 
-                # 3. 데이터 테이블 (기존과 동일)
+                # 3. 데이터 테이블 (펼치기/접기)
                 with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
                     end_date = scores_to_display.index.max()
                     start_date = end_date - pd.DateOffset(months=12)
                     recent_scores = scores_to_display[scores_to_display.index >= start_date]
                     sorted_recent_scores = recent_scores.sort_index(ascending=False)
-                    st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                    
+                    # --- ▼▼▼ 에러 방지 코드 추가 ▼▼▼ ---
+                    # DataFrame이 비어있지 않을 때만 스타일을 적용합니다.
+                    if not sorted_recent_scores.empty:
+                        st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                    else:
+                        # 비어있을 경우, 스타일 없이 그냥 빈 테이블을 표시합니다.
+                        st.dataframe(sorted_recent_scores)
+                    # --- ▲▲▲ 코드 추가 끝 ▲▲▲ ---
 
                 # --- ▼▼▼ Matplotlib 그래프를 Plotly 인터랙티브 그래프로 교체 ▼▼▼ ---
                 # 4. 데이터를 Plotly가 사용하기 좋은 'long' 형태로 변환
@@ -1497,6 +1505,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
