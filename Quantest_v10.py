@@ -1238,7 +1238,8 @@ with tab1:
                     # 기여도 지표 계산
                     avg_return = returns_when_held.mean()
                     win_rate = (returns_when_held > 0).sum() / len(returns_when_held) if not returns_when_held.empty else 0
-
+                    full_name = asset # 기본값은 티커
+                    if etf_df is not
                     contribution_data.append({
                         "자산 (Asset)": asset,
                         "총 보유 횟수": f"{months_held}회",
@@ -1568,6 +1569,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
