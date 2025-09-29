@@ -10,7 +10,7 @@ from matplotlib import font_manager, rc
 import numpy as np
 import os
 import pickle
-#import plotly.express as px
+import plotly.express as px
 from datetime import datetime, date
 
 
@@ -608,7 +608,7 @@ def get_saved_results(directory="backtest_results"):
 st.markdown("<a id='top'></a>", unsafe_allow_html=True)
 
 
-st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.0")
+st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.1")
 
 # session_state에 표시할 토스트 메시지가 저장되어 있는지 확인합니다.
 if 'toast_message' in st.session_state:
@@ -957,53 +957,60 @@ with tab1:
             else:
                 st.warning("카나리아 또는 벤치마크 자산 데이터를 찾을 수 없습니다.")
 
-        # --- [수정] 구성종목 모멘텀 점수 그래프 및 데이터 ---
+        # --- [수정] 구성종목 모멘텀 점수 (중복 컬럼 에러 및 KeyError 방지) ---
         st.subheader("📊 구성종목 모멘텀 점수")
 
-        # 1. 결과에서 필요한 데이터 추출
         momentum_scores = results.get('momentum_scores')
         config = results.get('config')
 
         if momentum_scores is not None and config is not None:
-            # 2. 공격/방어 자산 목록만 필터링
+            # --- ▼▼▼ 중복 티커 제거 로직 추가 ▼▼▼ ---
+            # 1. 공격/방어 자산 목록을 가져옵니다.
             aggressive_tickers = config['tickers']['AGGRESSIVE']
             defensive_tickers = config['tickers']['DEFENSIVE']
-            assets_to_show = [t for t in (aggressive_tickers + defensive_tickers) if t in momentum_scores.columns]
+            
+            # 2. 두 리스트를 합친 후, 중복을 제거하여 고유한 티커 목록을 만듭니다.
+            combined_assets = aggressive_tickers + defensive_tickers
+            unique_assets = list(dict.fromkeys(combined_assets))
+            
+            # 3. 모멘텀 점수 데이터에 실제 존재하는 티커만 필터링합니다.
+            assets_to_show = [t for t in unique_assets if t in momentum_scores.columns]
+            # --- ▲▲▲ 수정 끝 ▲▲▲ ---
             
             if assets_to_show:
                 scores_to_display = momentum_scores[assets_to_show]
 
-                # 3. 데이터 테이블 (펼치기/접기)
+                # 데이터 테이블 (기존과 동일)
                 with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
-                    # --- ▼▼▼ 데이터 필터링 및 정렬 로직 추가 ▼▼▼ ---
-                    # 1. 가장 최근 날짜로부터 12개월 이전 날짜를 계산
                     end_date = scores_to_display.index.max()
                     start_date = end_date - pd.DateOffset(months=12)
-                    
-                    # 2. 최근 12개월 데이터만 필터링
                     recent_scores = scores_to_display[scores_to_display.index >= start_date]
-                    
-                    # 3. 날짜를 내림차순으로 정렬 (최신 날짜가 위로)
                     sorted_recent_scores = recent_scores.sort_index(ascending=False)
                     
-                    # 4. 필터링되고 정렬된 데이터를 테이블에 표시
-                    st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
-                    # --- ▲▲▲ 로직 추가 끝 ▲▲▲ ---
+                    # 비어있는 테이블에 스타일 적용 시 발생하는 KeyError 방지
+                    if not sorted_recent_scores.empty:
+                        st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                    else:
+                        st.dataframe(sorted_recent_scores)
 
-                # 4. 모멘텀 점수 그래프 (그래프는 전체 기간을 표시하므로 수정 없음)
-                fig_assets, ax_assets = plt.subplots(figsize=(10, 5))
-
-                for ticker in scores_to_display.columns:
-                    ax_assets.plot(scores_to_display.index, scores_to_display[ticker], label=ticker, linewidth=1.0, alpha=0.8)
+                # Plotly 인터랙티브 그래프 (기존과 동일)
+                df_melted = scores_to_display.reset_index().rename(columns={'index': 'Date'})
+                df_melted = df_melted.melt(id_vars='Date', var_name='Ticker', value_name='Momentum Score')
                 
-                ax_assets.axhline(0, color='red', linestyle=':', linewidth=1.0)
-                ax_assets.set_title('구성종목 모멘텀 점수 추이', fontsize=16)
-                ax_assets.set_xlabel('Date', fontsize=12)
-                ax_assets.set_ylabel('모멘텀 점수', fontsize=12)
-                ax_assets.grid(True, which="both", ls="--", linewidth=0.5)
-                ax_assets.legend(loc='upper left', ncol=2)
-
-                st.pyplot(fig_assets)
+                fig_interactive = px.line(
+                    df_melted,
+                    x='Date',
+                    y='Momentum Score',
+                    color='Ticker',
+                    title='구성종목 모멘텀 점수 추이',
+                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수'}
+                )
+                
+                fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
+                fig_interactive.update_layout(legend_title_text='티커')
+                
+                st.plotly_chart(fig_interactive, use_container_width=True)
+                
             else:
                 st.info("표시할 공격 또는 방어 자산의 모멘텀 데이터가 없습니다.")
         else:
@@ -1496,35 +1503,5 @@ st.markdown(
     unsafe_allow_html=True
 
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
