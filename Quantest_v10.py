@@ -1226,8 +1226,11 @@ with tab1:
                 
         with st.expander("⚖️ 월별 리밸런싱 내역 보기 (최근 12개월)"):
             recent_weights = target_weights[target_weights.index > (target_weights.index.max() - pd.DateOffset(months=12))]
-            for date, weights in recent_weights.iterrows():
-                holdings = weights[weights > 0]; display_month_str = (date + pd.DateOffset(months=1)).strftime('%Y-%m')
+            for date, weights in reversed(list(recent_weights.iterrows())):
+                holdings = weights[weights > 0]
+                # 리밸런싱 판단 시점(date)을 기준으로 다음 달을 표시
+                display_month_str = (date + pd.DateOffset(months=1)).strftime('%Y-%m')
+    
                 if not holdings.empty:
                     holding_list = []
                     for ticker, weight in holdings.items():
@@ -1533,8 +1536,6 @@ st.markdown(
     unsafe_allow_html=True
 
 )
-
-
 
 
 
