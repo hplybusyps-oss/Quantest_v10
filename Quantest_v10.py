@@ -1021,7 +1021,7 @@ with tab1:
                     title='구성종목 모멘텀 점수 추이',
                     labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '이름'},
                     hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
-                    hover_data={'Ticker': True, 'Date': False, 'Momentum Score': ':.3f'} # 호버 데이터 상세 설정
+                    hover_data={'Ticker': True, 'Date': True, 'Momentum Score': ':.3f'} # 호버 데이터 상세 설정
                 )
                 
                 fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
@@ -1521,6 +1521,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
