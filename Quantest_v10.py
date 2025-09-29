@@ -1200,29 +1200,61 @@ with tab1:
             monthly_avg = heatmap_pivot.mean(); heatmap_pivot.loc['Average'] = monthly_avg
             st.dataframe(heatmap_pivot.style.format("{:.2%}", na_rep="").background_gradient(cmap='RdYlGn', axis=None))
 
-        st.subheader("💎 개별 자산 성과 비교 (Buy & Hold)")
-        with st.spinner('개별 자산 성과 계산 중...'):
-            all_used_tickers = prices.columns.tolist(); asset_perf_list = []
-            asset_returns_all = prices.pct_change()
-            for asset in all_used_tickers:
-                asset_returns = asset_returns_all[asset].dropna()
-                if not asset_returns.empty:
-                    asset_cum_returns = (1 + asset_returns).cumprod(); asset_first_date = asset_cum_returns.first_valid_index()
-                    asset_years = (asset_cum_returns.index[-1] - asset_first_date).days / 365.25 if asset_first_date is not None else 0
-                    asset_cagr, asset_mdd, asset_vol, asset_sharpe = 0, 0, 0, 0
-                    if asset_years > 0:
-                        asset_cagr = (asset_cum_returns.iloc[-1])**(1/asset_years) - 1
-                        asset_mdd, _, _ = get_mdd_details(asset_cum_returns)
-                        trading_periods_asset = 252; asset_vol = asset_returns.std() * np.sqrt(trading_periods_asset)
-                        asset_sharpe = (asset_cagr - config['risk_free_rate']) / asset_vol if asset_vol != 0 else 0
-                    full_name = ""; 
-                    if etf_df is not None:
-                        match = etf_df[etf_df['Ticker'] == asset]
-                        if not match.empty: full_name = match.iloc[0]['Name']
-                    asset_perf_list.append({'Ticker': asset, 'Name': full_name, 'CAGR': asset_cagr, 'Volatility': asset_vol, 'MDD': asset_mdd, 'Sharpe Ratio': asset_sharpe})
-            if asset_perf_list:
-                asset_perf_df = pd.DataFrame(asset_perf_list).set_index(['Ticker', 'Name'])
-                st.dataframe(asset_perf_df.style.format({'CAGR': '{:.2%}', 'Volatility': '{:.2%}', 'MDD': '{:.2%}', 'Sharpe Ratio': '{:.2f}'}))
+        # --- [수정] '전략 기여도 분석' 테이블 ---
+        st.subheader("💎 개별 자산 전략 기여도 분석")
+        with st.spinner('개별 자산 기여도 계산 중...'):
+            # 1. 필요한 데이터 추출
+            target_weights = results.get('target_weights')
+            prices = results.get('prices')
+            config = results.get('config')
+            
+            contribution_data = []
+            
+            # 2. 리밸런싱 주기에 맞는 기간별 수익률 계산
+            rebal_dates = target_weights.index
+            # 리밸런싱 날짜에 해당하는 가격만 추출
+            periodic_prices = prices.loc[rebal_dates]
+            # 기간별 수익률 계산
+            periodic_returns = periodic_prices.pct_change()
+
+            # 3. 분석할 전체 자산 목록 준비 (중복 제거)
+            aggressive_tickers = config['tickers']['AGGRESSIVE']
+            defensive_tickers = config['tickers']['DEFENSIVE']
+            all_assets = list(dict.fromkeys(aggressive_tickers + defensive_tickers))
+
+            # 4. 각 자산별 기여도 계산
+            for asset in all_assets:
+                if asset in target_weights.columns:
+                    # 해당 자산이 포트폴리오에 포함된 기간(월/분기)을 찾음
+                    holding_periods = target_weights.index[target_weights[asset] > 0]
+                    
+                    months_held = len(holding_periods)
+                    if months_held == 0:
+                        continue # 한 번도 보유하지 않은 자산은 건너뜀
+
+                    # 보유했던 기간 동안의 수익률만 추출
+                    returns_when_held = periodic_returns.loc[holding_periods, asset].dropna()
+                    
+                    # 기여도 지표 계산
+                    avg_return = returns_when_held.mean()
+                    win_rate = (returns_when_held > 0).sum() / len(returns_when_held) if not returns_when_held.empty else 0
+
+                    contribution_data.append({
+                        "자산 (Asset)": asset,
+                        "총 보유 횟수": f"{months_held}회",
+                        "평균 보유 기간 수익률": avg_return,
+                        "보유 시 승률": win_rate
+                    })
+
+            # 5. 결과 테이블 표시
+            if contribution_data:
+                contribution_df = pd.DataFrame(contribution_data).set_index("자산 (Asset)")
+                st.dataframe(contribution_df.style.format({
+                    "평균 보유 기간 수익률": "{:,.2%}",
+                    "보유 시 승률": "{:,.2%}"
+                }))
+            else:
+                st.info("기여도를 분석할 자산 데이터가 없습니다.")
                 
         with st.expander("⚖️ 월별 리밸런싱 내역 보기 (최근 12개월)"):
             recent_weights = target_weights[target_weights.index > (target_weights.index.max() - pd.DateOffset(months=12))]
@@ -1536,6 +1568,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
