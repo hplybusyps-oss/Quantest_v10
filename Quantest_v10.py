@@ -993,17 +993,35 @@ with tab1:
                     else:
                         st.dataframe(sorted_recent_scores)
 
-                # Plotly 인터랙티브 그래프 (기존과 동일)
+                # --- ▼▼▼ Plotly 그래프 로직 수정 ▼▼▼ ---
+                # 1. 데이터를 'long' 형태로 변환
                 df_melted = scores_to_display.reset_index().rename(columns={'index': 'Date'})
                 df_melted = df_melted.melt(id_vars='Date', var_name='Ticker', value_name='Momentum Score')
-                
+
+                # 2. Stock_list.csv의 이름 정보를 df_melted에 합치기(merge)
+                if etf_df is not None:
+                    # Ticker를 기준으로 이름(Name) 컬럼을 추가합니다.
+                    df_merged = pd.merge(
+                        df_melted, 
+                        etf_df[['Ticker', 'Name']], 
+                        on='Ticker', 
+                        how='left' # 모멘텀 데이터 기준으로 합치기
+                    )
+                else:
+                    # Stock_list.csv가 없으면 Name 컬럼을 Ticker와 동일하게 설정
+                    df_merged = df_melted.copy()
+                    df_merged['Name'] = df_merged['Ticker']
+
+                # 3. Plotly Express 라인 차트 생성 시 호버 옵션 추가
                 fig_interactive = px.line(
-                    df_melted,
+                    df_merged, # 이름이 추가된 데이터프레임 사용
                     x='Date',
                     y='Momentum Score',
                     color='Ticker',
                     title='구성종목 모멘텀 점수 추이',
-                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수'}
+                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '이름'},
+                    hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
+                    hover_data={'Ticker': True, 'Date': False, 'Momentum Score': ':.3f'} # 호버 데이터 상세 설정
                 )
                 
                 fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
@@ -1503,5 +1521,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
+
 
 
