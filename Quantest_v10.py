@@ -64,7 +64,7 @@ def load_Stock_list():
         csv_path = os.path.join(application_path, 'Stock_list.csv')
 
         # 완성된 경로를 이용해 CSV 파일을 읽습니다.
-        df = pd.read_csv(csv_path, encoding='cp949')
+        df = pd.read_csv(csv_path, encoding='utf-8')
         # --- 여기까지 ---
         df['display'] = df['Ticker'] + ' - ' + df['Name']
         return df
@@ -1536,6 +1536,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
