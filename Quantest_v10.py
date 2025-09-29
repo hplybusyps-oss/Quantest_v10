@@ -960,62 +960,57 @@ with tab1:
         # --- [수정] 구성종목 모멘텀 점수 (인터랙티브 그래프 적용) ---
         st.subheader("📊 구성종목 모멘텀 점수")
 
-        momentum_scores = results.get('momentum_scores')
-        config = results.get('config')
+        # 1. 결과에서 필요한 데이터 추출
+        momentum_scores = results.get('momentum_scores')
+        config = results.get('config')
 
-        if momentum_scores is not None and config is not None:
-            aggressive_tickers = config['tickers']['AGGRESSIVE']
-            defensive_tickers = config['tickers']['DEFENSIVE']
-            assets_to_show = [t for t in (aggressive_tickers + defensive_tickers) if t in momentum_scores.columns]
-            
-            if assets_to_show:
-                scores_to_display = momentum_scores[assets_to_show]
+        if momentum_scores is not None and config is not None:
 
-                with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
-                    end_date = scores_to_display.index.max()
-                    start_date = end_date - pd.DateOffset(months=12)
-                    recent_scores = scores_to_display[scores_to_display.index >= start_date]
-                    sorted_recent_scores = recent_scores.sort_index(ascending=False)
-                    
-                    if not sorted_recent_scores.empty:
-                        # --- ▼▼▼ 바로 이 부분을 수정합니다 ▼▼▼ ---
-                        # 1. 스타일을 적용하기 전에 숫자 형식의 컬럼만 선택합니다.
-                        numeric_df = sorted_recent_scores.select_dtypes(include=np.number)
-                        
-                        # 2. 숫자 컬럼에만 스타일을 안전하게 적용합니다.
-                        st.dataframe(numeric_df.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
-                        # --- ▲▲▲ 수정 끝 ▲▲▲ ---
-                    else:
-                        st.dataframe(sorted_recent_scores)
+            # 2. 공격/방어 자산 목록만 필터링
+            aggressive_tickers = config['tickers']['AGGRESSIVE']
+            defensive_tickers = config['tickers']['DEFENSIVE']
+            assets_to_show = [t for t in (aggressive_tickers + defensive_tickers) if t in momentum_scores.columns]
+            
+            if assets_to_show:
+                scores_to_display = momentum_scores[assets_to_show]
 
-                # --- ▼▼▼ Matplotlib 그래프를 Plotly 인터랙티브 그래프로 교체 ▼▼▼ ---
-                # 4. 데이터를 Plotly가 사용하기 좋은 'long' 형태로 변환
-                #    날짜 인덱스를 'Date' 컬럼으로 변경
-                df_melted = scores_to_display.reset_index().rename(columns={'index': 'Date'})
-                df_melted = df_melted.melt(id_vars='Date', var_name='Ticker', value_name='Momentum Score')
-                
-                # 5. Plotly Express로 라인 차트 생성
-                fig_interactive = px.line(
-                    df_melted,
-                    x='Date',
-                    y='Momentum Score',
-                    color='Ticker', # Ticker별로 색상 자동 지정
-                    title='구성종목 모멘텀 점수 추이 (인터랙티브)',
-                    labels={'Date': '날짜', 'Momentum Score': '모멘텀 점수'}
-                )
-                
-                # 6. 0점 기준선 추가 및 디자인 업데이트
-                fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
-                fig_interactive.update_layout(legend_title_text='티커') # 범례 제목 설정
-                
-                # 7. Streamlit에 그래프 표시
-                st.plotly_chart(fig_interactive, use_container_width=True)
-                # --- ▲▲▲ 교체 끝 ▲▲▲ ---
-                
-            else:
-                st.info("표시할 공격 또는 방어 자산의 모멘텀 데이터가 없습니다.")
-        else:
-            st.warning("모멘텀 점수 데이터를 결과 파일에서 찾을 수 없습니다.")
+                # 3. 데이터 테이블 (펼치기/접기)
+                with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
+                    # --- ▼▼▼ 데이터 필터링 및 정렬 로직 추가 ▼▼▼ ---
+                    # 1. 가장 최근 날짜로부터 12개월 이전 날짜를 계산
+                    end_date = scores_to_display.index.max()
+                    start_date = end_date - pd.DateOffset(months=12)
+                    
+                    # 2. 최근 12개월 데이터만 필터링
+                    recent_scores = scores_to_display[scores_to_display.index >= start_date]
+                  
+                    # 3. 날짜를 내림차순으로 정렬 (최신 날짜가 위로)
+                    sorted_recent_scores = recent_scores.sort_index(ascending=False)
+                   
+                    # 4. 필터링되고 정렬된 데이터를 테이블에 표시
+                    st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                    # --- ▲▲▲ 로직 추가 끝 ▲▲▲ ---
+
+                # 4. 모멘텀 점수 그래프 (그래프는 전체 기간을 표시하므로 수정 없음)
+
+                fig_assets, ax_assets = plt.subplots(figsize=(10, 5))
+
+                for ticker in scores_to_display.columns:
+                    ax_assets.plot(scores_to_display.index, scores_to_display[ticker], label=ticker, linewidth=1.0, alpha=0.8)
+                
+                ax_assets.axhline(0, color='red', linestyle=':', linewidth=1.0)
+                ax_assets.set_title('구성종목 모멘텀 점수 추이', fontsize=16)
+                ax_assets.set_xlabel('Date', fontsize=12)
+                ax_assets.set_ylabel('모멘텀 점수', fontsize=12)
+                ax_assets.grid(True, which="both", ls="--", linewidth=0.5)
+                ax_assets.legend(loc='upper left', ncol=2)
+
+                st.pyplot(fig_assets)
+
+            else:
+                st.info("표시할 공격 또는 방어 자산의 모멘텀 데이터가 없습니다.")
+        else:
+            st.warning("모멘텀 점수 데이터를 결과 파일에서 찾을 수 없습니다.")
 
         st.header("3. 백테스트 결과")        
         
@@ -1504,6 +1499,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
