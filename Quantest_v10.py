@@ -956,45 +956,45 @@ with tab1:
             else:
                 st.warning("카나리아 또는 벤치마크 자산 데이터를 찾을 수 없습니다.")
 
-                # --- [추가] 구성종목 모멘텀 점수 그래프 및 데이터 ---
-                st.subheader("📊 구성종목 모멘텀 점수")
+        # --- [추가] 구성종목 모멘텀 점수 그래프 및 데이터 ---
+        st.subheader("📊 구성종목 모멘텀 점수")
 
-                # 1. 결과에서 필요한 데이터 추출
-                momentum_scores = results.get('momentum_scores')
-                config = results.get('config')
+        # 1. 결과에서 필요한 데이터 추출
+        momentum_scores = results.get('momentum_scores')
+        config = results.get('config')
 
-                if momentum_scores is not None and config is not None:
-                    # 2. 공격/방어 자산 목록만 필터링
-                    aggressive_tickers = config['tickers']['AGGRESSIVE']
-                    defensive_tickers = config['tickers']['DEFENSIVE']
-                    assets_to_show = [t for t in (aggressive_tickers + defensive_tickers) if t in momentum_scores.columns]
-                    
-                    if assets_to_show:
-                        scores_to_display = momentum_scores[assets_to_show]
+        if momentum_scores is not None and config is not None:
+            # 2. 공격/방어 자산 목록만 필터링
+            aggressive_tickers = config['tickers']['AGGRESSIVE']
+            defensive_tickers = config['tickers']['DEFENSIVE']
+            assets_to_show = [t for t in (aggressive_tickers + defensive_tickers) if t in momentum_scores.columns]
+            
+            if assets_to_show:
+                scores_to_display = momentum_scores[assets_to_show]
 
-                        # 3. 데이터 테이블 (펼치기/접기)
-                        with st.expander("모멘텀 점수 상세 데이터 보기"):
-                            st.dataframe(scores_to_display.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                # 3. 데이터 테이블 (펼치기/접기)
+                with st.expander("모멘텀 점수 상세 데이터 보기"):
+                    st.dataframe(scores_to_display.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
 
-                        # 4. 모멘텀 점수 그래프
-                        fig_assets, ax_assets = plt.subplots(figsize=(10, 5))
+                # 4. 모멘텀 점수 그래프
+                fig_assets, ax_assets = plt.subplots(figsize=(10, 5))
 
-                        for ticker in scores_to_display.columns:
-                            # 각 자산의 색상을 다르게 하여 그래프 그리기
-                            ax_assets.plot(scores_to_display.index, scores_to_display[ticker], label=ticker, linewidth=1.0, alpha=0.8)
-                        
-                        ax_assets.axhline(0, color='red', linestyle=':', linewidth=1.0)
-                        ax_assets.set_title('구성종목 모멘텀 점수 추이', fontsize=16)
-                        ax_assets.set_xlabel('날짜', fontsize=12)
-                        ax_assets.set_ylabel('모멘텀 점수', fontsize=12)
-                        ax_assets.grid(True, which="both", ls="--", linewidth=0.5)
-                        ax_assets.legend(loc='upper left', ncol=2) # 범례가 많을 경우 2줄로 표시
+                for ticker in scores_to_display.columns:
+                    # 각 자산의 색상을 다르게 하여 그래프 그리기
+                    ax_assets.plot(scores_to_display.index, scores_to_display[ticker], label=ticker, linewidth=1.0, alpha=0.8)
+                
+                ax_assets.axhline(0, color='red', linestyle=':', linewidth=1.0)
+                ax_assets.set_title('구성종목 모멘텀 점수 추이', fontsize=16)
+                ax_assets.set_xlabel('날짜', fontsize=12)
+                ax_assets.set_ylabel('모멘텀 점수', fontsize=12)
+                ax_assets.grid(True, which="both", ls="--", linewidth=0.5)
+                ax_assets.legend(loc='upper left', ncol=2) # 범례가 많을 경우 2줄로 표시
 
-                        st.pyplot(fig_assets)
-                    else:
-                        st.info("표시할 공격 또는 방어 자산의 모멘텀 데이터가 없습니다.")
-                else:
-                    st.warning("모멘텀 점수 데이터를 결과 파일에서 찾을 수 없습니다.")
+                st.pyplot(fig_assets)
+            else:
+                st.info("표시할 공격 또는 방어 자산의 모멘텀 데이터가 없습니다.")
+        else:
+            st.warning("모멘텀 점수 데이터를 결과 파일에서 찾을 수 없습니다.")
 
         
         if config['monthly_contribution'] > 0:
@@ -1482,6 +1482,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
