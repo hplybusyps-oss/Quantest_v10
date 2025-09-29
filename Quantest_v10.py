@@ -1212,9 +1212,7 @@ with tab1:
             
             # 2. 리밸런싱 주기에 맞는 기간별 수익률 계산
             rebal_dates = target_weights.index
-            # 리밸런싱 날짜에 해당하는 가격만 추출
             periodic_prices = prices.loc[rebal_dates]
-            # 기간별 수익률 계산
             periodic_returns = periodic_prices.pct_change()
 
             # 3. 분석할 전체 자산 목록 준비 (중복 제거)
@@ -1225,23 +1223,31 @@ with tab1:
             # 4. 각 자산별 기여도 계산
             for asset in all_assets:
                 if asset in target_weights.columns:
-                    # 해당 자산이 포트폴리오에 포함된 기간(월/분기)을 찾음
                     holding_periods = target_weights.index[target_weights[asset] > 0]
                     
                     months_held = len(holding_periods)
                     if months_held == 0:
-                        continue # 한 번도 보유하지 않은 자산은 건너뜀
+                        continue
 
-                    # 보유했던 기간 동안의 수익률만 추출
                     returns_when_held = periodic_returns.loc[holding_periods, asset].dropna()
                     
-                    # 기여도 지표 계산
                     avg_return = returns_when_held.mean()
                     win_rate = (returns_when_held > 0).sum() / len(returns_when_held) if not returns_when_held.empty else 0
-                    full_name = asset # 기본값은 티커
-                    if etf_df is not
+
+                    # --- ▼▼▼ 전체 이름(Full Name) 찾아서 합치는 로직 ▼▼▼ ---
+                    full_name = asset # 기본값은 티커로 설정
+                    if etf_df is not None:
+                        match = etf_df[etf_df['Ticker'] == asset]
+                        if not match.empty:
+                            # CSV 파일에 해당 티커 정보가 있으면 전체 이름으로 변경
+                            full_name = match.iloc[0]['Name']
+                    
+                    # 최종적으로 표시될 이름 형식 (예: SPY - SPDR S&P 500...)
+                    display_name = f"{asset} - {full_name}" if asset != full_name else asset
+                    # --- ▲▲▲ 로직 끝 ▲▲▲ ---
+
                     contribution_data.append({
-                        "자산 (Asset)": asset,
+                        "자산 (Asset)": display_name, # 티커 대신 display_name 사용
                         "총 보유 횟수": f"{months_held}회",
                         "평균 보유 기간 수익률": avg_return,
                         "보유 시 승률": win_rate
@@ -1569,6 +1575,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
