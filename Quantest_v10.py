@@ -283,23 +283,47 @@ with st.sidebar.expander("티커 관리"):
             else:
                 st.warning("삭제할 티커를 먼저 선택해주세요.")
 
+
 st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
+
+    # --- [수정] session_state를 안전하게 초기화하는 로직 추가 ---
+    # 1. 각 자산군의 기본 선택 목록을 미리 정의합니다.
+    default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
+    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
+    default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
+
+    # 2. session_state에 해당 키가 없을 경우 (앱 첫 실행 시) 기본값으로 채워줍니다.
+    if 'selected_canary' not in st.session_state:
+        st.session_state.selected_canary = default_canary_list
+    if 'selected_aggressive' not in st.session_state:
+        st.session_state.selected_aggressive = default_aggressive_list
+    if 'selected_defensive' not in st.session_state:
+        st.session_state.selected_defensive = default_defensive_list
+
+    # 3. multiselect 위젯에서는 default 인자를 제거합니다. key가 알아서 값을 관리합니다.
     with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
-        default_canary = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
-        selected_canary_display = st.multiselect("카나리아 자산 검색", display_list, default=default_canary, label_visibility="collapsed")
+        st.multiselect(
+            "카나리아 자산 검색", display_list, 
+            key='selected_canary' 
+        )
     with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
-        default_aggressive = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
-        selected_aggressive_display = st.multiselect("공격 자산 검색", display_list, default=default_aggressive, label_visibility="collapsed")
+        st.multiselect(
+            "공격 자산 검색", display_list, 
+            key='selected_aggressive'
+        )
     with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
-        default_defensive = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
-        selected_defensive_display = st.multiselect("방어 자산 검색", display_list, default=default_defensive, label_visibility="collapsed")
- 
-    # 선택된 값을 session_state에서 직접 가져오도록 변경
+        st.multiselect(
+            "방어 자산 검색", display_list, 
+            key='selected_defensive'
+        )
+    
+    # 4. 이제 session_state에서 값을 읽어와도 항상 존재하므로 에러가 발생하지 않습니다.
     aggressive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_aggressive]
     defensive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_defensive]
     canary_tickers = [s.split(' - ')[0] for s in st.session_state.selected_canary]
+    # --- 수정 끝 ---
     
     with st.sidebar.expander("✅ 선택된 자산 목록", expanded=True):
         st.markdown("**카나리아**"); st.info(f"{', '.join(canary_tickers) if canary_tickers else '없음'}")
@@ -1578,6 +1602,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
