@@ -288,38 +288,34 @@ st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
 
-    # --- [수정] session_state를 안전하게 초기화하는 로직 추가 ---
-    # 1. 각 자산군의 기본 선택 목록을 미리 정의합니다.
+    # --- [수정] multiselect의 default 값을 session_state와 연동하여 상태 유지 ---
+    # 1. 각 자산군의 기본 선택 목록을 미리 정의합니다. (기존과 동일)
     default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
     default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
     default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
 
-    # 2. session_state에 해당 키가 없을 경우 (앱 첫 실행 시) 기본값으로 채워줍니다.
-    if 'selected_canary' not in st.session_state:
-        st.session_state.selected_canary = default_canary_list
-    if 'selected_aggressive' not in st.session_state:
-        st.session_state.selected_aggressive = default_aggressive_list
-    if 'selected_defensive' not in st.session_state:
-        st.session_state.selected_defensive = default_defensive_list
-
-    # 3. multiselect 위젯에서는 default 인자를 제거합니다. key가 알아서 값을 관리합니다.
+    # 2. 위젯의 default 값을 st.session_state.get()을 사용하여 동적으로 설정합니다.
     with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
         st.multiselect(
-            "카나리아 자산 검색", display_list, 
-            key='selected_canary' 
+            "카나리아 자산 검색", display_list,
+            # session_state에 'selected_canary'가 있으면 그 값을, 없으면 default_canary_list를 기본값으로 사용
+            default=st.session_state.get('selected_canary', default_canary_list),
+            key='selected_canary'
         )
     with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
         st.multiselect(
-            "공격 자산 검색", display_list, 
+            "공격 자산 검색", display_list,
+            default=st.session_state.get('selected_aggressive', default_aggressive_list),
             key='selected_aggressive'
         )
     with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
         st.multiselect(
-            "방어 자산 검색", display_list, 
+            "방어 자산 검색", display_list,
+            default=st.session_state.get('selected_defensive', default_defensive_list),
             key='selected_defensive'
         )
     
-    # 4. 이제 session_state에서 값을 읽어와도 항상 존재하므로 에러가 발생하지 않습니다.
+    # 3. session_state에서 값을 읽어오는 부분은 기존과 동일합니다.
     aggressive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_aggressive]
     defensive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_defensive]
     canary_tickers = [s.split(' - ')[0] for s in st.session_state.selected_canary]
@@ -1602,6 +1598,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
