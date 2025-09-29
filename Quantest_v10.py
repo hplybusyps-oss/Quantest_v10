@@ -225,7 +225,7 @@ with st.sidebar.expander("티커 관리"):
 
                 # --- [수정] 캐시가 아닌, 실제 파일을 직접 읽어 중복을 확인합니다 ---
                 try:
-                    df_from_disk = pd.read_csv(csv_path, encoding='cp949')
+                    df_from_disk = pd.read_csv(csv_path, encoding='utf-8')
                 except FileNotFoundError:
                     df_from_disk = pd.DataFrame(columns=['Ticker'])
                 
@@ -234,7 +234,7 @@ with st.sidebar.expander("티커 관리"):
                     try:
                         import csv
                         file_exists = os.path.exists(csv_path)
-                        with open(csv_path, 'a', newline='', encoding='cp949') as f:
+                        with open(csv_path, 'a', newline='', encoding='utf-8') as f:
                             writer = csv.writer(f)
                             if not file_exists or os.path.getsize(csv_path) == 0:
                                 writer.writerow(['Ticker', 'Name'])
@@ -271,7 +271,7 @@ with st.sidebar.expander("티커 관리"):
                         application_path = os.path.dirname(os.path.abspath(__file__))
                     csv_path = os.path.join(application_path, 'Stock_list.csv')
 
-                    updated_df.to_csv(csv_path, index=False, encoding='cp949')
+                    updated_df.to_csv(csv_path, index=False, encoding='utf-8')
                     
                     st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")
                     
@@ -1575,6 +1575,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
