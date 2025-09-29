@@ -2,7 +2,7 @@ streamlit
 yfinance
 pandas
 matplotlib
-
 numpy
+plotly
 
 
