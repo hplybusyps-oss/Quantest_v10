@@ -86,7 +86,7 @@ st.sidebar.header("1. 기본 설정")
 
 start_date = st.sidebar.date_input(
     "시작일",
-    pd.to_datetime('2010-01-01').date() # 기본값을 date 객체로 명확히 변환
+    pd.to_datetime('2007-01-01').date() # 기본값을 date 객체로 명확히 변환
 )
 end_date = st.sidebar.date_input(
     "종료일",
@@ -109,7 +109,7 @@ st.sidebar.markdown(f"<p style='text-align: right; color: #555; margin-top: -10p
 # 월별 추가 투자금액 입력
 monthly_contribution = st.sidebar.number_input(
     "월별 추가 투자금액",
-    value=1000, # 기본값을 1000으로 변경
+    value=0, # 기본값을 1000으로 변경
     min_value=0,
     step=100, # 백 단위로 조절하기 쉽게 step 추가
     help="매월 리밸런싱 시점에 추가로 투자할 금액입니다."
@@ -145,9 +145,9 @@ else:
 
 st.sidebar.header("2. 실행 엔진 설정")
 backtest_type = st.sidebar.radio(
-    "백테스트 기준",
+    "백테스트 데이터 기준",
     ('일별', '월별'),
-    index=0,
+    index=1,
     help="""
     백테스트의 시간 단위를 결정합니다.
     - **일별**: 일별 데이터 사용
@@ -290,7 +290,7 @@ if etf_df is not None:
         default_canary = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
         selected_canary_display = st.multiselect("카나리아 자산 검색", display_list, default=default_canary, label_visibility="collapsed")
     with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
-        default_aggressive = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'VEA - Vanguard FTSE Developed Markets ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
+        default_aggressive = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
         selected_aggressive_display = st.multiselect("공격 자산 검색", display_list, default=default_aggressive, label_visibility="collapsed")
     with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
         default_defensive = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
@@ -1171,6 +1171,8 @@ with tab1:
         bm_annual_returns = monthly_bm_returns_for_annual.resample('A').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Benchmark")
         annual_df = pd.concat([annual_returns, bm_annual_returns], axis=1)
         annual_df.index = annual_df.index.year
+        annual_df.index = annual_df.index.astype(str)
+        annual_df.index.name = "Date" # 인덱스 이름 재설정        
         with col1_annual: st.dataframe(annual_df.style.format("{:.2%}"))
         with col2_annual:
             fig2, ax2 = plt.subplots(figsize=(10, 5))
@@ -1531,6 +1533,8 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
+
 
 
 
