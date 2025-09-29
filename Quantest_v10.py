@@ -1,5 +1,4 @@
 import streamlit as st
-st.error("!!! 코드 버전 V2가 성공적으로 배포되었습니다 !!!")
 import yfinance as yf
 import pandas as pd
 import sys
@@ -961,12 +960,10 @@ with tab1:
         # --- [수정] 구성종목 모멘텀 점수 (인터랙티브 그래프 적용) ---
         st.subheader("📊 구성종목 모멘텀 점수")
 
-        # 1. 결과에서 필요한 데이터 추출
         momentum_scores = results.get('momentum_scores')
         config = results.get('config')
 
         if momentum_scores is not None and config is not None:
-            # 2. 공격/방어 자산 목록만 필터링
             aggressive_tickers = config['tickers']['AGGRESSIVE']
             defensive_tickers = config['tickers']['DEFENSIVE']
             assets_to_show = [t for t in (aggressive_tickers + defensive_tickers) if t in momentum_scores.columns]
@@ -974,21 +971,22 @@ with tab1:
             if assets_to_show:
                 scores_to_display = momentum_scores[assets_to_show]
 
-                # 3. 데이터 테이블 (펼치기/접기)
                 with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
                     end_date = scores_to_display.index.max()
                     start_date = end_date - pd.DateOffset(months=12)
                     recent_scores = scores_to_display[scores_to_display.index >= start_date]
                     sorted_recent_scores = recent_scores.sort_index(ascending=False)
                     
-                    # --- ▼▼▼ 에러 방지 코드 추가 ▼▼▼ ---
-                    # DataFrame이 비어있지 않을 때만 스타일을 적용합니다.
                     if not sorted_recent_scores.empty:
-                        st.dataframe(sorted_recent_scores.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                        # --- ▼▼▼ 바로 이 부분을 수정합니다 ▼▼▼ ---
+                        # 1. 스타일을 적용하기 전에 숫자 형식의 컬럼만 선택합니다.
+                        numeric_df = sorted_recent_scores.select_dtypes(include=np.number)
+                        
+                        # 2. 숫자 컬럼에만 스타일을 안전하게 적용합니다.
+                        st.dataframe(numeric_df.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                        # --- ▲▲▲ 수정 끝 ▲▲▲ ---
                     else:
-                        # 비어있을 경우, 스타일 없이 그냥 빈 테이블을 표시합니다.
                         st.dataframe(sorted_recent_scores)
-                    # --- ▲▲▲ 코드 추가 끝 ▲▲▲ ---
 
                 # --- ▼▼▼ Matplotlib 그래프를 Plotly 인터랙티브 그래프로 교체 ▼▼▼ ---
                 # 4. 데이터를 Plotly가 사용하기 좋은 'long' 형태로 변환
@@ -1506,6 +1504,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
