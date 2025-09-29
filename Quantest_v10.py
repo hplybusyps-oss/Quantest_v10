@@ -10,7 +10,7 @@ from matplotlib import font_manager, rc
 import numpy as np
 import os
 import pickle
-import plotly.express as px
+#import plotly.express as px
 from datetime import datetime, date
 
 
@@ -1496,6 +1496,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
