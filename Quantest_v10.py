@@ -1067,8 +1067,19 @@ with tab1:
                     title='구성종목 모멘텀 점수 추이',
                     labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '종목명'},
                     hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
-                    hover_data={'Ticker': True, 'Date': True, 'Momentum Score': ':.3f'} # 호버 데이터 상세 설정
+                    custom_data=['Ticker']
                 )
+                # 4. 툴팁(hovertemplate) 서식과 순서를 직접 지정
+                fig_interactive.update_traces(
+                    hovertemplate=(
+                        "<b>%{hovertext}</b><br><br>" + # hovertext는 hover_name으로 지정된 'Name'을 의미 (맨 위 굵은 글씨)
+                        "티커: %{customdata[0]}<br>" +     # customdata[0]은 custom_data의 첫 번째 항목인 'Ticker'를 의미
+                        "모멘텀 점수: %{y:.3f}<br>" +      # y는 y축 값인 'Momentum Score'를 의미
+                        "날짜: %{x|%Y-%m-%d}" +            # x는 x축 값인 'Date'를 의미
+                        "<extra></extra>"                # Plotly에서 기본으로 붙는 추가 정보 박스 제거
+                    )
+                )
+
                 
                 fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
                 fig_interactive.update_layout(legend_title_text='종목명')
@@ -1611,6 +1622,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
