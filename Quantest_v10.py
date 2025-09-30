@@ -51,6 +51,13 @@ plt.rc('axes', unicode_minus=False)
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크", page_icon="📈", layout="wide")
 
+# --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
+if 'toast_message' in st.session_state:
+    # session_state에 저장된 메시지를 toast로 표시
+    st.toast(st.session_state.toast_message, icon="✅")
+    # 메시지를 한 번만 표시하기 위해 바로 삭제
+    del st.session_state.toast_message
+
 @st.cache_data
 def load_Stock_list():
     try:
@@ -814,7 +821,8 @@ with tab1:
                 st.session_state['results'] = loaded_data
                 # 현재 처리한 파일의 ID를 session_state에 기록합니다.
                 st.session_state.last_uploaded_file_id = current_file_id
-                st.success(f"'{uploaded_file_tab1.name}' 파일의 상세 결과를 성공적으로 불러왔습니다.")
+                
+                st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
                 # 결과를 즉시 반영하고, 불필요한 재실행을 막기 위해 st.rerun()을 호출합니다.
                 st.rerun() 
             except Exception as e:
@@ -1675,6 +1683,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
