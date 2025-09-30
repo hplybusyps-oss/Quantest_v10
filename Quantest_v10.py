@@ -888,17 +888,18 @@ with tab1:
         if failed_tickers: 
             st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")
         
-        st.subheader("데이터 미리보기 (최근 5일)")
-        display_df = prices.tail().copy()
-        new_column_names = []
-        for ticker in display_df.columns:
-            full_name = ticker
-            if etf_df is not None:
-                match = etf_df[etf_df['Ticker'] == ticker]
-                if not match.empty: full_name = match.iloc[0]['Name']
-            new_column_names.append(full_name)
-        display_df.columns = new_column_names
-        st.dataframe(display_df.style.format("{:,.0f}"))
+        with st.expander("데이터 미리보기 (최근 5일)"):
+            display_df = prices.tail().copy()
+            new_column_names = []
+            for ticker in display_df.columns:
+                full_name = ticker
+                if etf_df is not None:
+                    match = etf_df[etf_df['Ticker'] == ticker]
+                    if not match.empty: 
+                        full_name = match.iloc[0]['Name']
+                new_column_names.append(full_name)
+            display_df.columns = new_column_names
+            st.dataframe(display_df.style.format("{:,.0f}"))
 
         st.header("2. 시그널 모멘텀")
         
@@ -1622,6 +1623,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
