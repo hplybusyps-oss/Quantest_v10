@@ -1063,15 +1063,15 @@ with tab1:
                     df_merged, # 이름이 추가된 데이터프레임 사용
                     x='Date',
                     y='Momentum Score',
-                    color='Ticker',
+                    color='Name',
                     title='구성종목 모멘텀 점수 추이',
-                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '이름'},
+                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '종목명'},
                     hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
                     hover_data={'Ticker': True, 'Date': True, 'Momentum Score': ':.3f'} # 호버 데이터 상세 설정
                 )
                 
                 fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
-                fig_interactive.update_layout(legend_title_text='티커')
+                fig_interactive.update_layout(legend_title_text='종목명')
                 
                 st.plotly_chart(fig_interactive, use_container_width=True)
                 
@@ -1611,6 +1611,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
