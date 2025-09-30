@@ -920,6 +920,7 @@ with tab1:
             st.markdown(
                 f'<div style="background-color: #f0f2f6; border-radius: 0.25rem; padding: 0.75rem; color: #31333F;">{display_benchmark}</div>', 
                 unsafe_allow_html=True
+            ) 
         
         # 티커 리스트를 '티커 - 전체이름' 형식의 문자열 리스트로 변환하는 헬퍼 함수
         def format_asset_list(ticker_list, df):
@@ -1674,6 +1675,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
