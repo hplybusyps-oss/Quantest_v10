@@ -915,8 +915,11 @@ with tab1:
                     benchmark_name = match.iloc[0]['Name']
             
             display_benchmark = f"{benchmark_ticker} - {benchmark_name}" if benchmark_ticker != benchmark_name else benchmark_ticker
-            # 회색 텍스트로 표시
-            st.markdown(f"<p style='color:#808080'>{display_benchmark}</p>", unsafe_allow_html=True)
+            
+            # st.info와 유사한 회색 배경의 상자를 직접 만듭니다.
+            st.markdown(
+                f'<div style="background-color: #f0f2f6; border-radius: 0.25rem; padding: 0.75rem; color: #31333F;">{display_benchmark}</div>', 
+                unsafe_allow_html=True
         
         # 티커 리스트를 '티커 - 전체이름' 형식의 문자열 리스트로 변환하는 헬퍼 함수
         def format_asset_list(ticker_list, df):
@@ -1671,6 +1674,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
