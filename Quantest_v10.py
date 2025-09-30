@@ -903,7 +903,21 @@ with tab1:
             
         st.subheader("사용한 자산군 정보")
         config_tickers = config.get('tickers', {})
-
+        
+        # --- [추가] 벤치마크 정보 표시 ---
+        benchmark_ticker = config.get('benchmark')
+        if benchmark_ticker:
+            st.markdown("**벤치마크**")
+            benchmark_name = benchmark_ticker
+            if etf_df is not None:
+                match = etf_df[etf_df['Ticker'] == benchmark_ticker]
+                if not match.empty:
+                    benchmark_name = match.iloc[0]['Name']
+            
+            display_benchmark = f"{benchmark_ticker} - {benchmark_name}" if benchmark_ticker != benchmark_name else benchmark_ticker
+            # 회색 텍스트로 표시
+            st.markdown(f"<p style='color:#808080'>{display_benchmark}</p>", unsafe_allow_html=True)
+        
         # 티커 리스트를 '티커 - 전체이름' 형식의 문자열 리스트로 변환하는 헬퍼 함수
         def format_asset_list(ticker_list, df):
             if not ticker_list:
@@ -1657,6 +1671,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
