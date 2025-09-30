@@ -242,6 +242,10 @@ with st.sidebar.expander("티커 관리"):
                         
                         st.success(f"'{new_name}' ({new_ticker}) 추가 완료!")
                         load_Stock_list.clear()
+                        # --- [추가] 새로고침 직전, 현재 선택값을 임시 저장 ---
+                        st.session_state.temp_selection_agg = st.session_state.selected_aggressive
+                        st.session_state.temp_selection_def = st.session_state.selected_defensive
+                        st.session_state.temp_selection_can = st.session_state.selected_canary                                           
                         st.rerun()
                     except Exception as e:
                         st.error(f"파일 쓰기 중 오류 발생: {e}")
@@ -273,9 +277,12 @@ with st.sidebar.expander("티커 관리"):
 
                     updated_df.to_csv(csv_path, index=False, encoding='utf-8')
                     
-                    st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")
-                    
+                    st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")                  
                     load_Stock_list.clear()
+                    # --- [추가] 새로고침 직전, 현재 선택값을 임시 저장 ---
+                    st.session_state.temp_selection_agg = st.session_state.selected_aggressive
+                    st.session_state.temp_selection_def = st.session_state.selected_defensive
+                    st.session_state.temp_selection_can = st.session_state.selected_canary
                     st.rerun()
 
                 except Exception as e:
@@ -286,18 +293,47 @@ with st.sidebar.expander("티커 관리"):
 st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
+
+    # --- [1단계] 새로고침 후, 임시 저장된 선택값을 다시 복원 ---
+    if 'temp_selection_agg' in st.session_state:
+        st.session_state.selected_aggressive = st.session_state.temp_selection_agg
+        del st.session_state.temp_selection_agg
+    if 'temp_selection_def' in st.session_state:
+        st.session_state.selected_defensive = st.session_state.temp_selection_def
+        del st.session_state.temp_selection_def
+    if 'temp_selection_can' in st.session_state:
+        st.session_state.selected_canary = st.session_state.temp_selection_can
+        del st.session_state.temp_selection_can
+
+    # --- [2단계] 위젯의 default 값을 session_state와 연동 ---
+    default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
+    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
+    default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
+
     with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
-        default_canary = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
-        selected_canary_display = st.multiselect("카나리아 자산 검색", display_list, default=default_canary, label_visibility="collapsed")
+        st.multiselect(
+            "카나리아 자산 검색", display_list,
+            default=st.session_state.get('selected_canary', default_canary_list),
+            key='selected_canary'
+        )
     with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
-        default_aggressive = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
-        selected_aggressive_display = st.multiselect("공격 자산 검색", display_list, default=default_aggressive, label_visibility="collapsed")
+        st.multiselect(
+            "공격 자산 검색", display_list,
+            default=st.session_state.get('selected_aggressive', default_aggressive_list),
+            key='selected_aggressive'
+        )
     with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
-        default_defensive = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
-        selected_defensive_display = st.multiselect("방어 자산 검색", display_list, default=default_defensive, label_visibility="collapsed")
-    aggressive_tickers = [s.split(' - ')[0] for s in selected_aggressive_display]
-    defensive_tickers = [s.split(' - ')[0] for s in selected_defensive_display]
-    canary_tickers = [s.split(' - ')[0] for s in selected_canary_display]
+        st.multiselect(
+            "방어 자산 검색", display_list,
+            default=st.session_state.get('selected_defensive', default_defensive_list),
+            key='selected_defensive'
+        )
+    
+    # --- [3단계] session_state에서 최종 선택값을 가져옴 ---
+    aggressive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_aggressive]
+    defensive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_defensive]
+    canary_tickers = [s.split(' - ')[0] for s in st.session_state.selected_canary]
+
     with st.sidebar.expander("✅ 선택된 자산 목록", expanded=True):
         st.markdown("**카나리아**"); st.info(f"{', '.join(canary_tickers) if canary_tickers else '없음'}")
         st.markdown("**공격**"); st.success(f"{', '.join(aggressive_tickers) if aggressive_tickers else '없음'}")
@@ -1575,6 +1611,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
