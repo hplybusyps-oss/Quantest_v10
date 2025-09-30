@@ -887,6 +887,25 @@ with tab1:
 
         if failed_tickers: 
             st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")
+
+        # [추가] 백테스트에 사용된 자산군 정보 표시
+        st.subheader("사용한 자산군 정보")
+        config_tickers = config.get('tickers', {}) # config에서 tickers 정보 가져오기
+        
+        # 각 자산군 목록을 가져옵니다.
+        canary_list = config_tickers.get('CANARY', [])
+        aggressive_list = config_tickers.get('AGGRESSIVE', [])
+        defensive_list = config_tickers.get('DEFENSIVE', [])
+        
+        # 사이드바와 동일한 스타일로 표시합니다.
+        st.markdown("**카나리아**")
+        st.info(f"{', '.join(canary_list) if canary_list else '없음'}")
+        
+        st.markdown("**공격 자산**")
+        st.success(f"{', '.join(aggressive_list) if aggressive_list else '없음'}")
+
+        st.markdown("**방어 자산**")
+        st.warning(f"{', '.join(defensive_list) if defensive_list else '없음'}")       
         
         with st.expander("데이터 미리보기 (최근 5일)"):
             display_df = prices.tail().copy()
@@ -1623,6 +1642,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
