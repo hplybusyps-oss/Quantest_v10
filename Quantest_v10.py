@@ -945,9 +945,6 @@ with tab1:
         
                 # 5. 이중 축 그래프 그리기 (이하 동일)
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
-                ax_mom.minorticks_on() 
-                ax_mom.grid(True, which='major', linestyle='--', linewidth=0.5)
-                ax_mom.grid(True, which='minor', linestyle=':', linewidth=0.5)
                 ax_price = ax_mom.twinx()
         
                 # 왼쪽 축: 카나리아 모멘텀
@@ -1625,6 +1622,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
