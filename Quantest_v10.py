@@ -916,11 +916,11 @@ with tab1:
             
             display_benchmark = f"{benchmark_ticker} - {benchmark_name}" if benchmark_ticker != benchmark_name else benchmark_ticker
             
-            # st.info와 유사한 회색 배경의 상자를 직접 만듭니다.
+            # --- [수정] 아래 div의 style에 margin-bottom을 추가하여 간격을 줍니다 ---
             st.markdown(
-                f'<div style="background-color: #f0f2f6; border-radius: 0.25rem; padding: 0.75rem; color: #31333F;">{display_benchmark}</div>', 
+                f'<div style="background-color: #f0f2f6; border-radius: 0.25rem; padding: 0.75rem; color: #31333F; margin-bottom: 1rem;">{display_benchmark}</div>', 
                 unsafe_allow_html=True
-            ) 
+            )
         
         # 티커 리스트를 '티커 - 전체이름' 형식의 문자열 리스트로 변환하는 헬퍼 함수
         def format_asset_list(ticker_list, df):
@@ -1675,6 +1675,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
