@@ -886,26 +886,7 @@ with tab1:
             st.info(f"💡 요청하신 기간의 첫 거래일인 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
 
         if failed_tickers: 
-            st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")
-
-        # [추가] 백테스트에 사용된 자산군 정보 표시
-        st.subheader("사용한 자산군 정보")
-        config_tickers = config.get('tickers', {}) # config에서 tickers 정보 가져오기
-        
-        # 각 자산군 목록을 가져옵니다.
-        canary_list = config_tickers.get('CANARY', [])
-        aggressive_list = config_tickers.get('AGGRESSIVE', [])
-        defensive_list = config_tickers.get('DEFENSIVE', [])
-        
-        # 사이드바와 동일한 스타일로 표시합니다.
-        st.markdown("**카나리아**")
-        st.info(f"{', '.join(canary_list) if canary_list else '없음'}")
-        
-        st.markdown("**공격 자산**")
-        st.success(f"{', '.join(aggressive_list) if aggressive_list else '없음'}")
-
-        st.markdown("**방어 자산**")
-        st.warning(f"{', '.join(defensive_list) if defensive_list else '없음'}")       
+            st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")    
         
         with st.expander("데이터 미리보기 (최근 5일)"):
             display_df = prices.tail().copy()
@@ -919,9 +900,43 @@ with tab1:
                 new_column_names.append(full_name)
             display_df.columns = new_column_names
             st.dataframe(display_df.style.format("{:,.0f}"))
+            
+        st.subheader("사용한 자산군 정보")
+        config_tickers = config.get('tickers', {})
 
-        st.header("2. 시그널 모멘텀")
+        # 티커 리스트를 '티커 - 전체이름' 형식의 문자열 리스트로 변환하는 헬퍼 함수
+        def format_asset_list(ticker_list, df):
+            if not ticker_list:
+                return "없음"
+            
+            formatted_items = []
+            for ticker in ticker_list:
+                full_name = ticker  # 기본값은 티커로 설정
+                if df is not None:
+                    match = df[df['Ticker'] == ticker]
+                    if not match.empty:
+                        full_name = match.iloc[0]['Name']
+                
+                # 티커와 이름이 다를 경우에만 " - "로 연결
+                display_item = f"{ticker} - {full_name}" if ticker != full_name else ticker
+                formatted_items.append(display_item)
+            
+            # 각 항목을 쉼표와 줄바꿈으로 연결하여 가독성 향상
+            return ", \n".join(formatted_items)
+
+        # 각 자산군 목록을 가져와 포맷팅
+        canary_list = config_tickers.get('CANARY', [])
+        aggressive_list = config_tickers.get('AGGRESSIVE', [])
+        defensive_list = config_tickers.get('DEFENSIVE', [])
         
+        st.markdown("**카나리아**")
+        st.info(format_asset_list(canary_list, etf_df))
+        st.markdown("**공격 자산**")
+        st.success(format_asset_list(aggressive_list, etf_df))
+        st.markdown("**방어 자산**")
+        st.warning(format_asset_list(defensive_list, etf_df))
+        
+        st.header("2. 시그널 모멘텀")
         # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
         st.subheader("📊 카나리아 모멘텀 추이 vs. 벤치마크 가격")
         
@@ -1642,6 +1657,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
