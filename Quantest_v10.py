@@ -809,8 +809,13 @@ if run_button_clicked:
         st.session_state.toast_shown = False       
         st.session_state.result_selector = "--- 새로운 백테스트 실행 ---"
 
+    # last_uploaded_file_id 대신, file_uploader의 key인 'uploader_tab1'을 None으로 설정합니다.
+    if 'uploader_tab1' in st.session_state:
+        st.session_state.uploader_tab1 = None
+    
+    # last_uploaded_file_id도 함께 정리해줍니다.
     if 'last_uploaded_file_id' in st.session_state:
-        del st.session_state['last_uploaded_file_id']
+        del st.session_state.last_uploaded_file_id
 
     st.rerun()        
 
@@ -1734,6 +1739,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
