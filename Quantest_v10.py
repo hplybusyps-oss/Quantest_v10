@@ -848,13 +848,11 @@ with tab1:
                     loaded_data = pickle.load(uploaded_file_tab1)
                     st.session_state['results'] = loaded_data
                     st.session_state.last_uploaded_file_id = current_file_id
-
-                    # --- [추가] 현재 결과의 출처를 '파일'로 명시 ---
                     st.session_state.source = 'file'
                     
-                    # 사이드바를 변경하는 로직은 여전히 비활성화 상태여야 합니다.
-                    # if 'config' in loaded_data:
-                    #     st.session_state.config_to_load = loaded_data['config']
+                    # pkl 파일 안의 설정(config)을 불러와서 사이드바에 적용하도록 합니다.
+                    if 'config' in loaded_data:
+                        st.session_state.config_to_load = loaded_data['config']
 
                     st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
                     st.rerun()  
@@ -1754,6 +1752,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
