@@ -45,7 +45,13 @@ else:
 # 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
 plt.rc('axes', unicode_minus=False)     
 
-
+# 'clear_uploader_flag'가 True로 설정되어 있으면, 파일 업로더 상태를 초기화하고 플래그를 다시 False로 바꿉니다.
+if st.session_state.get('clear_uploader_flag', False):
+    st.session_state.uploader_tab1 = None
+    if 'last_uploaded_file_id' in st.session_state:
+        del st.session_state.last_uploaded_file_id
+    # 플래그를 사용했으므로 다시 꺼줍니다.
+    st.session_state.clear_uploader_flag = False
 
 # -----------------------------------------------------------------------------
 # 1. GUI 화면 구성 (Streamlit)
@@ -808,15 +814,9 @@ if run_button_clicked:
         st.session_state.settings_changed = False
         st.session_state.toast_shown = False       
         st.session_state.result_selector = "--- 새로운 백테스트 실행 ---"
-
-    # last_uploaded_file_id 대신, file_uploader의 key인 'uploader_tab1'을 None으로 설정합니다.
-    if 'uploader_tab1' in st.session_state:
-        st.session_state.uploader_tab1 = None
+        
+    st.session_state.clear_uploader_flag = True
     
-    # last_uploaded_file_id도 함께 정리해줍니다.
-    if 'last_uploaded_file_id' in st.session_state:
-        del st.session_state.last_uploaded_file_id
-
     st.rerun()        
 
 # --- 탭과 결과 표시는 '백테스트 실행' 버튼 블록 바깥에 위치 ---
@@ -1739,6 +1739,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
