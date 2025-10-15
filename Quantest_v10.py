@@ -301,42 +301,32 @@ st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
 
-    # --- [1단계] 새로고침 후, 임시 저장된 선택값을 다시 복원 ---
-    if 'temp_selection_agg' in st.session_state:
-        st.session_state.selected_aggressive = st.session_state.temp_selection_agg
-        del st.session_state.temp_selection_agg
-    if 'temp_selection_def' in st.session_state:
-        st.session_state.selected_defensive = st.session_state.temp_selection_def
-        del st.session_state.temp_selection_def
-    if 'temp_selection_can' in st.session_state:
-        st.session_state.selected_canary = st.session_state.temp_selection_can
-        del st.session_state.temp_selection_can
-
-    # --- [2단계] 위젯의 default 값을 session_state와 연동 ---
+    # --- [수정] 불러온 .pkl 파일의 자산군을 사이드바에 적용 ---
+    # 기본 선택 목록을 미리 정의합니다.
     default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
-    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
+    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'VEA - Vanguard FTSE Developed Markets ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
     default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
-
-    with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
-        st.multiselect(
-            "카나리아 자산 검색", display_list,
-            default=st.session_state.get('selected_canary', default_canary_list),
-            key='selected_canary'
-        )
-    with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
-        st.multiselect(
-            "공격 자산 검색", display_list,
-            default=st.session_state.get('selected_aggressive', default_aggressive_list),
-            key='selected_aggressive'
-        )
-    with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
-        st.multiselect(
-            "방어 자산 검색", display_list,
-            default=st.session_state.get('selected_defensive', default_defensive_list),
-            key='selected_defensive'
-        )
     
-    # --- [3단계] session_state에서 최종 선택값을 가져옴 ---
+    # 만약 불러온 파일의 자산군 정보가 임시 저장되어 있다면, 그것을 기본값으로 사용합니다.
+    if 'tickers_to_load' in st.session_state:
+        loaded_tickers = st.session_state.tickers_to_load
+        
+        # 불러온 티커 목록을 '티커 - 이름' 형식으로 변환하여 기본값으로 설정
+        default_canary_list = [item for item in display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
+        default_aggressive_list = [item for item in display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
+        default_defensive_list = [item for item in display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
+        
+        # 한 번 사용한 임시 정보는 삭제하여, 사용자가 자유롭게 선택을 바꿀 수 있도록 합니다.
+        del st.session_state.tickers_to_load
+    
+    # 위젯을 그립니다.
+    with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
+        st.multiselect("카나리아 자산 검색", display_list, default=default_canary_list, key='selected_canary')
+    with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
+        st.multiselect("공격 자산 검색", display_list, default=default_aggressive_list, key='selected_aggressive')
+    with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
+        st.multiselect("방어 자산 검색", display_list, default=default_defensive_list, key='selected_defensive')
+    
     aggressive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_aggressive]
     defensive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_defensive]
     canary_tickers = [s.split(' - ')[0] for s in st.session_state.selected_canary]
@@ -651,7 +641,7 @@ def get_saved_results(directory="backtest_results"):
 st.markdown("<a id='top'></a>", unsafe_allow_html=True)
 
 
-st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.1")
+st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.2")
 
 # session_state에 표시할 토스트 메시지가 저장되어 있는지 확인합니다.
 if 'toast_message' in st.session_state:
@@ -821,6 +811,10 @@ with tab1:
                 st.session_state['results'] = loaded_data
                 # 현재 처리한 파일의 ID를 session_state에 기록합니다.
                 st.session_state.last_uploaded_file_id = current_file_id
+                
+                # --- [추가] 불러온 파일의 자산군 정보를 임시 저장 ---
+                if 'config' in loaded_data and 'tickers' in loaded_data['config']:
+                    st.session_state.tickers_to_load = loaded_data['config']['tickers']
                 
                 st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
                 # 결과를 즉시 반영하고, 불필요한 재실행을 막기 위해 st.rerun()을 호출합니다.
@@ -1683,6 +1677,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
