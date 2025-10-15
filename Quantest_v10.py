@@ -980,6 +980,38 @@ with tab1:
         st.success(format_asset_list(aggressive_list, etf_df))
         st.markdown("**방어 자산**")
         st.warning(format_asset_list(defensive_list, etf_df))
+
+        # [추가] 사용한 시그널 설정 정보 표시
+        with st.expander("사용한 시그널 설정"):
+            # .pkl 파일의 config에서 시그널 관련 정보 추출
+            momentum_params = config.get('momentum_params', {})
+            
+            # 1. 모멘텀 종류 표시
+            st.markdown(f"**모멘텀 종류**: `{momentum_params.get('type', 'N/A')}`")
+            
+            # 2. 모멘텀 기간 표시
+            periods = momentum_params.get('periods', [])
+            st.markdown(f"**모멘텀 기간**: `{', '.join(map(str, periods))}` (개월)")
+
+          # [추가] 사용한 포트폴리오 구성 전략 정보 표시
+        with st.expander("사용한 포트폴리오 구성 전략"):
+            # .pkl 파일의 config에서 포트폴리오 관련 정보 추출
+            portfolio_params = config.get('portfolio_params', {})
+            
+            # 각 전략 설정을 가져옵니다.
+            use_canary = portfolio_params.get('use_canary', False)
+            use_hybrid = portfolio_params.get('use_hybrid_protection', False)
+            top_agg = portfolio_params.get('top_n_aggressive', 'N/A')
+            top_def = portfolio_params.get('top_n_defensive', 'N/A')
+            weighting = portfolio_params.get('weighting', 'N/A')
+
+            # 보기 좋게 포맷하여 표시합니다.
+            st.markdown(f"**카나리아 자산 사용 (Risk-On/Off)**: `{'사용' if use_canary else '미사용'}`")
+            st.markdown(f"**하이브리드 보호 장치 사용**: `{'사용' if use_hybrid else '미사용'}`")
+            st.markdown(f"**공격 자산 Top N**: `{top_agg}`")
+            st.markdown(f"**방어 자산 Top N**: `{top_def}`")
+            st.markdown(f"**자산 배분 방식**: `{weighting}`")      
+        
         
         st.header("2. 시그널 모멘텀")
         # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
@@ -1702,6 +1734,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
