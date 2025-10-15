@@ -301,32 +301,28 @@ st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
 
-    # --- [수정] 불러온 .pkl 파일의 자산군을 사이드바에 적용 ---
-    # 기본 선택 목록을 미리 정의합니다.
-    default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
-    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'VEA - Vanguard FTSE Developed Markets ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
-    default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
-    
-    # 만약 불러온 파일의 자산군 정보가 임시 저장되어 있다면, 그것을 기본값으로 사용합니다.
-    if 'tickers_to_load' in st.session_state:
-        loaded_tickers = st.session_state.tickers_to_load
-        
-        # 불러온 티커 목록을 '티커 - 이름' 형식으로 변환하여 기본값으로 설정
-        default_canary_list = [item for item in display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
-        default_aggressive_list = [item for item in display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
-        default_defensive_list = [item for item in display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
-        
-        # 한 번 사용한 임시 정보는 삭제하여, 사용자가 자유롭게 선택을 바꿀 수 있도록 합니다.
-        del st.session_state.tickers_to_load
-    
-    # 위젯을 그립니다.
+    # --- [수정] 위젯의 상태 관리를 st.session_state와 key에만 의존하도록 단순화 ---
+    # 기본값은 앱이 맨 처음 시작될 때 딱 한 번만 사용됩니다.
     with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
-        st.multiselect("카나리아 자산 검색", display_list, default=default_canary_list, key='selected_canary')
+        st.multiselect(
+            "카나리아 자산 검색", display_list,
+            default=[d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list],
+            key='selected_canary'
+        )
     with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
-        st.multiselect("공격 자산 검색", display_list, default=default_aggressive_list, key='selected_aggressive')
+        st.multiselect(
+            "공격 자산 검색", display_list,
+            default=[d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list],
+            key='selected_aggressive'
+        )
     with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
-        st.multiselect("방어 자산 검색", display_list, default=default_defensive_list, key='selected_defensive')
+        st.multiselect(
+            "방어 자산 검색", display_list,
+            default=[d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list],
+            key='selected_defensive'
+        )
     
+    # 이제 session_state에는 항상 최신 선택값이 들어있습니다.
     aggressive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_aggressive]
     defensive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_defensive]
     canary_tickers = [s.split(' - ')[0] for s in st.session_state.selected_canary]
@@ -800,24 +796,26 @@ with tab1:
     )
 
     if uploaded_file_tab1 is not None:
-        # 파일 이름과 크기를 조합하여 현재 업로드된 파일을 식별하는 고유 ID를 생성합니다.
         current_file_id = f"{uploaded_file_tab1.name}-{uploaded_file_tab1.size}"
         
-        # 이전에 기록된 파일 ID와 다를 경우, 즉 '새로운 파일'이 업로드된 경우에만 로직을 실행합니다.
-        # 이렇게 하면 텍스트 입력 후 엔터를 치는 등의 단순 새로고침에서는 파일이 다시 로드되지 않습니다.
         if current_file_id != st.session_state.get('last_uploaded_file_id'):
             try:
                 loaded_data = pickle.load(uploaded_file_tab1)
                 st.session_state['results'] = loaded_data
-                # 현재 처리한 파일의 ID를 session_state에 기록합니다.
                 st.session_state.last_uploaded_file_id = current_file_id
                 
-                # --- [추가] 불러온 파일의 자산군 정보를 임시 저장 ---
+                # --- [수정] 불러온 자산군 정보로 session_state를 즉시 덮어쓰기 ---
                 if 'config' in loaded_data and 'tickers' in loaded_data['config']:
-                    st.session_state.tickers_to_load = loaded_data['config']['tickers']
-                
+                    loaded_tickers = loaded_data['config']['tickers']
+                    # Stock_list.csv에서 전체 display 리스트를 가져옴
+                    full_display_list = load_Stock_list()['display'].tolist()
+
+                    # 불러온 티커 목록을 '티커 - 이름' 형식으로 변환하여 session_state에 직접 저장
+                    st.session_state.selected_canary = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
+                    st.session_state.selected_aggressive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
+                    st.session_state.selected_defensive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
+
                 st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
-                # 결과를 즉시 반영하고, 불필요한 재실행을 막기 위해 st.rerun()을 호출합니다.
                 st.rerun() 
             except Exception as e:
                 st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
@@ -1677,6 +1675,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
