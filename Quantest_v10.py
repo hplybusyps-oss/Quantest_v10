@@ -686,6 +686,11 @@ if st.session_state.get('settings_changed', False) and not run_button_clicked:
 
 # '백테스트 실행' 버튼을 다시 생성하고, 모든 계산/실행 로직을 이 버튼 안으로 이동
 if run_button_clicked:
+    st.session_state.source = 'new_run'
+    if 'uploader_key' not in st.session_state:
+        st.session_state.uploader_key = 0
+    st.session_state.uploader_key += 1
+    
     # 2. 상태 업데이트 로직을 블록의 맨 앞으로 이동
     #    이렇게 하면 이 블록이 실행되는 즉시 '변경됨' 상태가 해제됩니다.
     st.session_state.last_run_config = current_config # 사이드바에서 이미 만든 current_config 사용
@@ -823,29 +828,44 @@ with tab1:
 
     # --- .pkl 파일 업로드 기능 ---
     st.subheader("저장된 .pkl 파일 결과 보기")
+    # --- [수정] 파일 업로더의 key를 동적으로 변경하도록 설정 ---
+    if 'uploader_key' not in st.session_state:
+        st.session_state.uploader_key = 0
+
     uploaded_file_tab1 = st.file_uploader(
         "상세 결과를 보고 싶은 .pkl 파일을 업로드하세요.",
         type=['pkl'],
-        key="uploader_tab1"
+        key=f"uploader_tab1_{st.session_state.uploader_key}" # key를 동적으로 만듭니다.
     )
 
     if uploaded_file_tab1 is not None:
-        current_file_id = f"{uploaded_file_tab1.name}-{uploaded_file_tab1.size}"
-        
-        if current_file_id != st.session_state.get('last_uploaded_file_id'):
-            try:
-                loaded_data = pickle.load(uploaded_file_tab1)
-                st.session_state['results'] = loaded_data
-                st.session_state.last_uploaded_file_id = current_file_id
-                
-                # --- [수정] 불러온 설정을 임시 변수에 저장하고 rerun ---
-                if 'config' in loaded_data:
-                    st.session_state.config_to_load = loaded_data['config']
+        # --- [추가] 새로운 백테스트 실행 직후에는 파일 로딩을 방지하는 조건 ---
+        if st.session_state.get('source') != 'new_run':
+            current_file_id = f"{uploaded_file_tab1.name}-{uploaded_file_tab1.size}"
+            
+            if current_file_id != st.session_state.get('last_uploaded_file_id'):
+                try:
+                    loaded_data = pickle.load(uploaded_file_tab1)
+                    st.session_state['results'] = loaded_data
+                    st.session_state.last_uploaded_file_id = current_file_id
 
-                st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
-                st.rerun() 
-            except Exception as e:
-                st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
+                    # --- [추가] 현재 결과의 출처를 '파일'로 명시 ---
+                    st.session_state.source = 'file'
+                    
+                    # 사이드바를 변경하는 로직은 여전히 비활성화 상태여야 합니다.
+                    # if 'config' in loaded_data:
+                    #     st.session_state.config_to_load = loaded_data['config']
+
+                    st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
+                    st.rerun()  
+                except Exception as e:
+                    st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
+
+    # --- [수정] 새로운 백테스트 실행 후에는 source 상태를 초기화 ---
+    # 이 코드는 if uploaded_file_tab1 블록 바깥에 위치해야 합니다.
+    if st.session_state.get('source') == 'new_run':
+        st.session_state.source = None
+    
     st.divider()
 
     # --- 결과 표시 로직 (기존 로직을 session_state 확인 후 실행하도록 변경) ---
@@ -1734,6 +1754,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
