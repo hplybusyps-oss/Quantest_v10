@@ -854,7 +854,7 @@ with tab1:
                     if 'config' in loaded_data:
                         st.session_state.config_to_load = loaded_data['config']
 
-                    st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
+                    st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다. 사이드바의 티커와 자산 목록이 업데이트 되었습니다."
                     st.rerun()  
                 except Exception as e:
                     st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
@@ -1244,10 +1244,11 @@ with tab1:
 
             # --- [추가] 실행 엔진 설정 요약 표시 ---
             engine_settings_str = (
-                f"{config['backtest_type']} | "
-                f"{config['rebalance_freq']} 리밸런싱 ({config['rebalance_day']}) | "
-                f"거래비용: {config['transaction_cost']:.2%} | "
-                f"무위험: {config['risk_free_rate']:.2%}"
+              f"데이터: {config['backtest_type']} | "
+              f"주기: {config['rebalance_freq']} | "
+              f"기준일: {config['rebalance_day']} | "
+              f"거래비용: {config['transaction_cost']:.2%} | "
+              f"무위험: {config['risk_free_rate']:.2%}"
             )
             st.markdown(f"<p style='font-size: 0.85em; color: #555; margin-top: -10px;'>{engine_settings_str}</p>", unsafe_allow_html=True)
 
@@ -1752,6 +1753,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
