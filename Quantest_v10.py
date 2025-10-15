@@ -95,7 +95,16 @@ if 'config_to_load' in st.session_state:
             st.session_state.selected_canary = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
             st.session_state.selected_aggressive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
             st.session_state.selected_defensive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
-
+        
+        # 벤치마크 정보 업데이트
+        if 'benchmark' in loaded_config:
+            benchmark_ticker = loaded_config['benchmark']
+            # 불러온 벤치마크 티커에 해당하는 '티커 - 이름' 형식의 전체 이름을 찾습니다.
+            match = etf_df_for_update[etf_df_for_update['Ticker'] == benchmark_ticker]
+            if not match.empty:
+                # 찾은 이름을 session_state에 저장합니다.
+                st.session_state.sidebar_benchmark_display = match.iloc[0]['display']
+       
     # 한 번 사용한 임시 변수는 즉시 삭제
     del st.session_state.config_to_load
 
@@ -139,22 +148,33 @@ st.sidebar.markdown(f"<p style='text-align: right; color: #555; margin-top: -10p
 
 
 if etf_df is not None:
-    # 드롭다운 목록을 생성합니다 ('티커 - 이름' 형식).
     benchmark_options = etf_df['display'].tolist()
     
-    # 'SPY'에 해당하는 기본 선택값을 찾습니다.
-    # 리스트에 'SPY'가 포함된 항목이 여러 개일 경우 첫 번째 항목을 사용합니다.
-    default_benchmark = next((opt for opt in benchmark_options if 'SPY' in opt), benchmark_options[0])
+    # --- [수정] 벤치마크 위젯을 session_state와 연동 ---
+    # 1. session_state에 저장된 값이 있으면 그것을 기본값으로 사용하고, 없으면 'SPY'를 찾습니다.
+    default_benchmark_display = st.session_state.get(
+        'sidebar_benchmark_display', 
+        next((opt for opt in benchmark_options if 'SPY' in opt), benchmark_options[0])
+    )
     
-    # st.selectbox를 사용하여 드롭다운 메뉴를 생성합니다.
-    selected_benchmark_display = st.sidebar.selectbox(
-        "벤치마크 선택", # 라벨을 "벤치마크 선택"으로 변경
+    # 2. 기본값의 인덱스를 찾습니다. (값이 목록에 없을 경우를 대비하여 예외 처리)
+    try:
+        default_index = benchmark_options.index(default_benchmark_display)
+    except ValueError:
+        default_index = 0 # 목록에 없으면 첫 번째 항목을 기본값으로 사용
+    
+    # 3. selectbox에 key와 동적 index를 할당합니다.
+    st.sidebar.selectbox(
+        "벤치마크 선택",
         options=benchmark_options,
-        index=benchmark_options.index(default_benchmark), # 'SPY'를 기본값으로 설정
+        index=default_index,
+        key='sidebar_benchmark_display', # key를 통해 session_state와 연결
         help="전략의 성과를 비교할 기준 지수(벤치마크)를 선택하세요."
     )
-    # 선택된 값에서 실제 티커('SPY')만 추출합니다.
-    benchmark_ticker = selected_benchmark_display.split(' - ')[0]
+    
+    # 4. 최종 선택된 값은 항상 session_state에서 가져옵니다.
+    benchmark_ticker = st.session_state.sidebar_benchmark_display.split(' - ')[0]
+    # --- 수정 끝 ---
 else:
     # Stock_list.csv 파일이 없는 경우, 기존의 텍스트 입력 방식을 유지합니다.
     benchmark_ticker = st.sidebar.text_input(
@@ -1682,6 +1702,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
