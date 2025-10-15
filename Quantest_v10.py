@@ -45,6 +45,40 @@ else:
 # 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
 plt.rc('axes', unicode_minus=False)     
 
+
+
+# -----------------------------------------------------------------------------
+# 1. GUI 화면 구성 (Streamlit)
+# -----------------------------------------------------------------------------
+st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크", page_icon="📈", layout="wide")
+
+# --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
+if 'toast_message' in st.session_state:
+    # session_state에 저장된 메시지를 toast로 표시
+    st.toast(st.session_state.toast_message, icon="✅")
+    # 메시지를 한 번만 표시하기 위해 바로 삭제
+    del st.session_state.toast_message
+
+@st.cache_data
+def load_Stock_list():
+    try:
+        if getattr(sys, 'frozen', False):
+            application_path = os.path.dirname(sys.executable)
+        else:
+            application_path = os.path.dirname(os.path.abspath(__file__))
+        
+        csv_path = os.path.join(application_path, 'Stock_list.csv')
+
+        df = pd.read_csv(csv_path, encoding='utf-8')
+        
+        df['display'] = df['Ticker'] + ' - ' + df['Name']
+        return df
+    except FileNotFoundError:
+        return pd.DataFrame(columns=['Ticker', 'Name', 'display'])
+    except Exception as e:
+        st.error(f"Stock_list.csv 파일을 읽는 중 오류 발생: {e}")
+        return None
+
 # --- [추가] .pkl 파일 로드 시 사이드바 상태를 업데이트하는 로직 ---
 # st.rerun() 후 스크립트가 다시 시작될 때 이 부분이 먼저 실행됩니다.
 if 'config_to_load' in st.session_state:
@@ -64,46 +98,6 @@ if 'config_to_load' in st.session_state:
 
     # 한 번 사용한 임시 변수는 즉시 삭제
     del st.session_state.config_to_load
-
-# -----------------------------------------------------------------------------
-# 1. GUI 화면 구성 (Streamlit)
-# -----------------------------------------------------------------------------
-st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크", page_icon="📈", layout="wide")
-
-# --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
-if 'toast_message' in st.session_state:
-    # session_state에 저장된 메시지를 toast로 표시
-    st.toast(st.session_state.toast_message, icon="✅")
-    # 메시지를 한 번만 표시하기 위해 바로 삭제
-    del st.session_state.toast_message
-
-@st.cache_data
-def load_Stock_list():
-    try:
-        # 프로그램(.exe 또는 .py)이 있는 폴더의 경로를 찾습니다.
-        if getattr(sys, 'frozen', False):
-            application_path = os.path.dirname(sys.executable)
-        else:
-            application_path = os.path.dirname(os.path.abspath(__file__))
-
-        # 폴더 경로와 파일 이름을 합쳐 정확한 파일 경로를 만듭니다.
-        csv_path = os.path.join(application_path, 'Stock_list.csv')
-
-        # 완성된 경로를 이용해 CSV 파일을 읽습니다.
-        df = pd.read_csv(csv_path, encoding='utf-8')
-        # --- 여기까지 ---
-        df['display'] = df['Ticker'] + ' - ' + df['Name']
-        return df
-    except FileNotFoundError:
-        st.error("'Stock_list.csv' 파일을 찾을 수 없습니다. 프로그램과 같은 폴더에 파일을 생성해주세요.")
-        return None
-    # UnicodeDecodeError에 대한 예외 처리 추가
-    except UnicodeDecodeError:
-        st.error("""
-        'Stock_list.csv' 파일 인코딩 오류가 발생했습니다.
-        파일을 열어 '다른 이름으로 저장' > 'CSV UTF-8' 형식으로 다시 저장해보세요.
-        """)
-        return None
 
 etf_df = load_Stock_list()
 
@@ -1688,6 +1682,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
