@@ -1147,11 +1147,12 @@ with tab1:
                 scores_to_display = momentum_scores[assets_to_show]
 
                 # 데이터 테이블 (기존과 동일)
-                with st.expander("모멘텀 점수 상세 데이터 보기 (최근 12개월)"):
-                    end_date = scores_to_display.index.max()
-                    start_date = end_date - pd.DateOffset(months=12)
-                    recent_scores = scores_to_display[scores_to_display.index >= start_date]
-                    sorted_recent_scores = recent_scores.sort_index(ascending=False)
+                with st.expander("모멘텀 점수 상세 데이터 보기 (전체 기간)"):
+                    #end_date = scores_to_display.index.max()
+                    #start_date = end_date - pd.DateOffset(months=12)
+                    #recent_scores = scores_to_display[scores_to_display.index >= start_date]
+                    #sorted_recent_scores = recent_scores.sort_index(ascending=False)
+                    sorted_recent_scores = scores_to_display.sort_index(ascending=False)
                     
                     if not sorted_recent_scores.empty:
                         # --- ▼▼▼ 테이블 컬럼 이름 변경 로직 추가 ▼▼▼ ---
@@ -1441,9 +1442,10 @@ with tab1:
             else:
                 st.info("기여도를 분석할 자산 데이터가 없습니다.")
                 
-        with st.expander("⚖️ 월별 리밸런싱 내역 보기 (최근 12개월)"):
-            recent_weights = target_weights[target_weights.index > (target_weights.index.max() - pd.DateOffset(months=12))]
-            for date, weights in reversed(list(recent_weights.iterrows())):
+        with st.expander("⚖️ 월별 리밸런싱 내역 보기 (전체 기간)"):
+            #recent_weights = target_weights[target_weights.index > (target_weights.index.max() - pd.DateOffset(months=12))]
+            #for date, weights in reversed(list(recent_weights.iterrows())):
+            for date, weights in reversed(list(target_weights.iterrows())):
                 holdings = weights[weights > 0]
                 # 리밸런싱 판단 시점(date)을 기준으로 다음 달을 표시
                 display_month_str = (date + pd.DateOffset(months=1)).strftime('%Y-%m')
@@ -1753,6 +1755,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
