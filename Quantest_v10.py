@@ -815,8 +815,8 @@ if run_button_clicked:
         st.session_state.toast_shown = False       
         st.session_state.result_selector = "--- 새로운 백테스트 실행 ---"
         
-    st.session_state.clear_uploader_flag = True
-    
+    if 'last_uploaded_file_id' in st.session_state:
+        del st.session_state.last_uploaded_file_id    
     st.rerun()        
 
 # --- 탭과 결과 표시는 '백테스트 실행' 버튼 블록 바깥에 위치 ---
@@ -1739,6 +1739,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
