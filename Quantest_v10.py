@@ -45,6 +45,25 @@ else:
 # 5. 마이너스 부호(-)가 네모로 깨지는 현상을 방지합니다.
 plt.rc('axes', unicode_minus=False)     
 
+# --- [추가] .pkl 파일 로드 시 사이드바 상태를 업데이트하는 로직 ---
+# st.rerun() 후 스크립트가 다시 시작될 때 이 부분이 먼저 실행됩니다.
+if 'config_to_load' in st.session_state:
+    loaded_config = st.session_state.config_to_load
+    
+    # Stock_list.csv에서 전체 display 리스트를 임시로 가져옴
+    etf_df_for_update = load_Stock_list()
+    if etf_df_for_update is not None:
+        full_display_list = etf_df_for_update['display'].tolist()
+
+        # 불러온 티커 목록을 '티커 - 이름' 형식으로 변환하여 session_state에 직접 저장
+        if 'tickers' in loaded_config:
+            loaded_tickers = loaded_config['tickers']
+            st.session_state.selected_canary = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
+            st.session_state.selected_aggressive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
+            st.session_state.selected_defensive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
+
+    # 한 번 사용한 임시 변수는 즉시 삭제
+    del st.session_state.config_to_load
 
 # -----------------------------------------------------------------------------
 # 1. GUI 화면 구성 (Streamlit)
@@ -301,28 +320,29 @@ st.sidebar.header("3. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
 
-    # --- [수정] 위젯의 상태 관리를 st.session_state와 key에만 의존하도록 단순화 ---
-    # 기본값은 앱이 맨 처음 시작될 때 딱 한 번만 사용됩니다.
+    # --- [수정] session_state 초기화 및 위젯 생성 ---
+    # 기본값 목록 정의
+    default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
+    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
+    default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
+
+    # 앱 첫 실행 시에만 기본값으로 session_state를 초기화
+    if 'selected_canary' not in st.session_state:
+        st.session_state.selected_canary = default_canary_list
+    if 'selected_aggressive' not in st.session_state:
+        st.session_state.selected_aggressive = default_aggressive_list
+    if 'selected_defensive' not in st.session_state:
+        st.session_state.selected_defensive = default_defensive_list
+
+    # 위젯은 key를 통해 session_state와 자동으로 동기화됨 (default 인자 불필요)
     with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
-        st.multiselect(
-            "카나리아 자산 검색", display_list,
-            default=[d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list],
-            key='selected_canary'
-        )
+        st.multiselect("카나리아 자산 검색", display_list, key='selected_canary')
     with st.sidebar.popover("공격 자산 선택하기", use_container_width=True):
-        st.multiselect(
-            "공격 자산 검색", display_list,
-            default=[d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list],
-            key='selected_aggressive'
-        )
+        st.multiselect("공격 자산 검색", display_list, key='selected_aggressive')
     with st.sidebar.popover("방어 자산 선택하기", use_container_width=True):
-        st.multiselect(
-            "방어 자산 검색", display_list,
-            default=[d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list],
-            key='selected_defensive'
-        )
+        st.multiselect("방어 자산 검색", display_list, key='selected_defensive')
     
-    # 이제 session_state에는 항상 최신 선택값이 들어있습니다.
+    # session_state에서 값을 읽어옴
     aggressive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_aggressive]
     defensive_tickers = [s.split(' - ')[0] for s in st.session_state.selected_defensive]
     canary_tickers = [s.split(' - ')[0] for s in st.session_state.selected_canary]
@@ -804,16 +824,9 @@ with tab1:
                 st.session_state['results'] = loaded_data
                 st.session_state.last_uploaded_file_id = current_file_id
                 
-                # --- [수정] 불러온 자산군 정보로 session_state를 즉시 덮어쓰기 ---
-                if 'config' in loaded_data and 'tickers' in loaded_data['config']:
-                    loaded_tickers = loaded_data['config']['tickers']
-                    # Stock_list.csv에서 전체 display 리스트를 가져옴
-                    full_display_list = load_Stock_list()['display'].tolist()
-
-                    # 불러온 티커 목록을 '티커 - 이름' 형식으로 변환하여 session_state에 직접 저장
-                    st.session_state.selected_canary = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
-                    st.session_state.selected_aggressive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
-                    st.session_state.selected_defensive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
+                # --- [수정] 불러온 설정을 임시 변수에 저장하고 rerun ---
+                if 'config' in loaded_data:
+                    st.session_state.config_to_load = loaded_data['config']
 
                 st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다."
                 st.rerun() 
@@ -1675,6 +1688,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
