@@ -896,22 +896,12 @@ with tab1:
     # session_state에 결과가 있을 경우 (새로 실행했거나, 불러왔거나)
     if 'results' in st.session_state and st.session_state['results']:
         results = st.session_state['results']
-
-        # 1. 사용자가 설정한 실제 백테스트 시작일을 변수로 만듭니다.
-        backtest_start_date = pd.to_datetime(results['config']['start_date'])
-    
-        # 2. 표시될 모든 중간 데이터들을 이 날짜 기준으로 잘라냅니다.
-        results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
-        results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
-        results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
-        results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
         
         # 불러온 결과의 이름 표시
         st.subheader(f"📑 결과 요약: {results.get('name', '신규 백테스트')}")
         
         prices = results['prices']
         failed_tickers = results['failed_tickers']
-        # [수정] 예전 .pkl 파일과 호환되도록 수정
         culprit_tickers = results.get('culprit_tickers', [results.get('culprit_ticker')])
         config = results['config']; currency_symbol = results['currency_symbol']; etf_df = results['etf_df']
         
@@ -1095,12 +1085,17 @@ with tab1:
             st.markdown(f"**방어 자산 Top N**: `{top_def}`")
             st.markdown(f"**자산 배분 방식**: `{weighting}`")     
             
-        # --- [추가] 모든 메시지 표시 후, 실제 분석에 사용될 데이터를 시작일 기준으로 필터링 ---
+        # 모든 메시지 표시 후, 분석 데이터를 시작일 기준으로 필터링
         backtest_start_date = pd.to_datetime(results['config']['start_date'])
-        prices = prices[prices.index >= backtest_start_date]
+
+        # results 딕셔너리 내부의 데이터를 직접 필터링
+        results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
         results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
         results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
         results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
+
+        # 이후 코드에서 사용할 'prices' 변수도 필터링된 데이터로 다시 할당
+        prices = results['prices']
         
         st.header("2. 시그널 모멘텀")
         # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
@@ -1826,6 +1821,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
