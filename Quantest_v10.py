@@ -913,17 +913,31 @@ with tab1:
         
 
         st.header("1. 데이터 로딩 정보")
-        actual_start_date_str = prices.index[0].strftime('%Y-%m-%d')
-        backtest_start_date_str = pd.to_datetime(config['start_date']).strftime('%Y-%m-%d')
     
-        # 2. "워밍업" 안내 메시지를 표시할지 결정합니다.
-        if actual_start_date_str < backtest_start_date_str:
-            st.info(
-                f"💡 정확한 모멘텀 계산을 위해 **{actual_start_date_str}**부터 데이터를 미리 불러왔습니다.\n\n"
-                f"실제 백테스트와 모든 성과 분석은 설정하신 시작일인 **{backtest_start_date_str}**부터 시작됩니다."
-            )
-        # 3. 늦게 상장된 종목이 있어 시작일이 밀린 경우, 메시지에 필요한 변수를 생성하고 경고를 표시합니다.
-        elif culprit_tickers:
+        # --- [수정] 모든 시나리오를 처리하기 위한 메시지 생성 로직 ---
+    
+        # 1. 세 가지 핵심 날짜를 정의합니다.
+        user_start_date = pd.to_datetime(config['start_date'])
+        user_start_date_str = user_start_date.strftime('%Y-%m-%d')
+        
+        data_load_start_date_str = prices.index[0].strftime('%Y-%m-%d')
+        
+        # 실제 분석이 시작되는 첫 거래일을 찾습니다.
+        # prices 데이터에 사용자 시작일 이후의 날짜가 없을 경우를 대비해 예외 처리 추가
+        analysis_start_index = prices.index[prices.index >= user_start_date]
+        if not analysis_start_index.empty:
+            analysis_start_date = analysis_start_index[0]
+            analysis_start_date_str = analysis_start_date.strftime('%Y-%m-%d')
+        else:
+            # 이 경우는 데이터가 사용자 시작일 이전에 끝나버린 예외적인 상황
+            analysis_start_date_str = "데이터 없음"
+    
+    
+        # 2. 시나리오에 따라 적절한 메시지를 표시합니다.
+        
+        # 시나리오 1: 상장일이 늦어 백테스트가 지연된 경우 (가장 중요)
+        if culprit_tickers:
+            # (culprit_tickers 관련 변수 생성 로직은 이전과 동일하게 유지)
             culprit_names = []
             for ticker in culprit_tickers:
                 name = ticker
@@ -940,14 +954,22 @@ with tab1:
                 culprits_str = ', '.join(culprit_names)
                 reason_str = " 등의 데이터가 가장 늦게 시작되어"
             
-            st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
+            st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{data_load_start_date_str}**부터 백테스트를 시작합니다.")
+    
+        # 시나리오 2: 워밍업 기간이 있는 경우
+        elif data_load_start_date_str < user_start_date_str:
+            st.info(
+                f"💡 정확한 모멘텀 계산을 위해 **{data_load_start_date_str}**부터 데이터를 미리 불러왔습니다.\n\n"
+                f"실제 백테스트와 모든 성과 분석은 요청하신 기간의 첫 거래일인 **{analysis_start_date_str}**부터 시작됩니다."
+            )
         
-        # 4. 주말/휴일 등의 이유로 시작일이 변경된 경우
-        elif actual_start_date_str > backtest_start_date_str:
-            st.info(f"💡 요청하신 기간의 첫 거래일인 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
-        # 5. 요청한 시작일과 실제 시작일이 정확히 일치하는 경우
+        # 시나리오 3: 워밍업은 없지만, 시작일이 공휴일/주말이라 보정된 경우
+        elif analysis_start_date_str > user_start_date_str:
+            st.info(f"💡 요청하신 기간의 첫 거래일인 **{analysis_start_date_str}**부터 백테스트를 시작합니다.")
+    
+        # 시나리오 4: 모든 날짜가 정확히 일치하는 완벽한 경우
         else:
-            st.success(f"✅ 백테스트가 설정하신 시작일인 **{backtest_start_date_str}**에 맞춰 정상적으로 시작됩니다.")           
+            st.success(f"✅ 백테스트가 설정하신 시작일인 **{user_start_date_str}**에 맞춰 정상적으로 시작됩니다.")
 
         if failed_tickers: 
             st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")    
@@ -1780,6 +1802,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
