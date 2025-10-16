@@ -116,14 +116,14 @@ st.sidebar.header("1. 기본 설정")
 start_date = st.sidebar.date_input(
     "시작일",
     pd.to_datetime('2007-01-01').date(),
-    min_value=datetime.date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
-    max_value=date.today()              # 선택 가능한 가장 늦은 날짜
+    min_value=date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
+    max_value=date.today()
 )
 end_date = st.sidebar.date_input(
     "종료일",
     date.today(),
-    min_value=datetime.date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
-    max_value=date.today()              # 선택 가능한 가장 늦은 날짜
+    min_value=date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
+    max_value=date.today()
 )
 
 # --- 통화 선택 UI를 제거하고, 나중에 티커 기반으로 자동 결정 ---
@@ -1769,6 +1769,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
