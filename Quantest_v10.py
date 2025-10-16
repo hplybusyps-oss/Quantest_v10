@@ -949,7 +949,22 @@ with tab1:
         # 1단계: 백테스트 시작 사유에 대한 기본 메시지 표시
         # (이전과 동일한 if/elif/else 로직)
         if culprit_tickers:
-            # ... (culprit_tickers 관련 변수 생성 및 st.warning) ...
+            culprit_names = []
+            for ticker in culprit_tickers:
+                name = ticker
+                if etf_df is not None:
+                    match = etf_df[etf_df['Ticker'] == ticker]
+                    if not match.empty:
+                        name = match.iloc[0]['Name']
+                culprit_names.append(f"'{name}'({ticker})")
+        
+            if len(culprit_tickers) == 1:
+                culprits_str = culprit_names[0]
+                reason_str = "의 데이터가 가장 늦게 시작되어"
+            else:
+                culprits_str = ', '.join(culprit_names)
+                reason_str = " 등의 데이터가 가장 늦게 시작되어"
+        
             st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{data_load_start_date_str}**부터 백테스트를 시작합니다.")
         elif data_load_start_date_str < user_start_date_str:
             st.info(
@@ -1802,6 +1817,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
