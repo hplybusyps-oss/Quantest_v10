@@ -1393,6 +1393,13 @@ with tab1:
                 ax.axvspan(start_interval, end_interval, facecolor=color, alpha=0.3)
         line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='Strategy', color='royalblue', linewidth=1.0)
         line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='Benchmark', color='grey', linewidth=1.0)
+        
+        # 1. 데이터가 실제로 시작하는 첫 날짜(NaN이 아닌 첫 값의 인덱스)를 찾습니다.
+        first_valid_date = cumulative_returns.first_valid_index()
+        # 2. 유효한 날짜가 있을 경우, 그래프의 X축 시작점으로 설정합니다.
+        if first_valid_date is not None:
+            ax.set_xlim(left=first_valid_date)        
+            
         legend_handles = [line1, line2, Patch(facecolor='lightgreen', label='Aggressive'), Patch(facecolor='lightyellow', label='Defensive')]
         ax.set_title('Cumulative Value Over Time', fontsize=16)
         ax.set_xlabel('Date', fontsize=12); ax.set_ylabel('Portfolio Value', fontsize=12)
@@ -1821,6 +1828,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
