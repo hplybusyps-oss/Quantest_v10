@@ -880,17 +880,17 @@ with tab1:
 
     # --- 결과 표시 로직 (기존 로직을 session_state 확인 후 실행하도록 변경) ---
     # session_state에 결과가 있을 경우 (새로 실행했거나, 불러왔거나)
-    if 'results' in st.session_state and st.session_state['results']:
-        results = st.session_state['results']
+    # if 'results' in st.session_state and st.session_state['results']:
+    #     results = st.session_state['results']
         
-        # 1. 사용자가 설정한 실제 백테스트 시작일을 변수로 만듭니다.
-        backtest_start_date = pd.to_datetime(results['config']['start_date'])
+    #     # 1. 사용자가 설정한 실제 백테스트 시작일을 변수로 만듭니다.
+    #     backtest_start_date = pd.to_datetime(results['config']['start_date'])
     
-        # 2. 표시될 모든 중간 데이터들을 이 날짜 기준으로 잘라냅니다.
-        results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
-        results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
-        results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
-        results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
+    #     # 2. 표시될 모든 중간 데이터들을 이 날짜 기준으로 잘라냅니다.
+    #     results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
+    #     results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
+    #     results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
+    #     results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
     
         # 불러온 결과의 이름 표시
         st.subheader(f"📑 결과 요약: {results.get('name', '신규 백테스트')}")
@@ -954,6 +954,9 @@ with tab1:
         # 4. 주말/휴일 등의 이유로 시작일이 변경된 경우
         elif actual_start_date_str > backtest_start_date_str:
             st.info(f"💡 요청하신 기간의 첫 거래일인 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
+        # 5. 요청한 시작일과 실제 시작일이 정확히 일치하는 경우
+        else:
+            st.success(f"✅ 백테스트가 설정하신 시작일인 **{backtest_start_date_str}**에 맞춰 정상적으로 시작됩니다.")           
 
         if failed_tickers: 
             st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")    
@@ -1053,8 +1056,14 @@ with tab1:
             st.markdown(f"**하이브리드 보호 장치 사용**: `{'사용' if use_hybrid else '미사용'}`")
             st.markdown(f"**공격 자산 Top N**: `{top_agg}`")
             st.markdown(f"**방어 자산 Top N**: `{top_def}`")
-            st.markdown(f"**자산 배분 방식**: `{weighting}`")      
-        
+            st.markdown(f"**자산 배분 방식**: `{weighting}`")     
+            
+        # --- [추가] 모든 메시지 표시 후, 실제 분석에 사용될 데이터를 시작일 기준으로 필터링 ---
+        backtest_start_date = pd.to_datetime(results['config']['start_date'])
+        prices = prices[prices.index >= backtest_start_date]
+        results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
+        results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
+        results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
         
         st.header("2. 시그널 모멘텀")
         # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
@@ -1780,6 +1789,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
