@@ -880,18 +880,9 @@ with tab1:
 
     # --- 결과 표시 로직 (기존 로직을 session_state 확인 후 실행하도록 변경) ---
     # session_state에 결과가 있을 경우 (새로 실행했거나, 불러왔거나)
-    # if 'results' in st.session_state and st.session_state['results']:
-    #     results = st.session_state['results']
+    if 'results' in st.session_state and st.session_state['results']:
+        results = st.session_state['results']
         
-    #     # 1. 사용자가 설정한 실제 백테스트 시작일을 변수로 만듭니다.
-    #     backtest_start_date = pd.to_datetime(results['config']['start_date'])
-    
-    #     # 2. 표시될 모든 중간 데이터들을 이 날짜 기준으로 잘라냅니다.
-    #     results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
-    #     results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
-    #     results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
-    #     results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
-    
         # 불러온 결과의 이름 표시
         st.subheader(f"📑 결과 요약: {results.get('name', '신규 백테스트')}")
         
@@ -1789,6 +1780,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
