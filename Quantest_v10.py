@@ -1394,11 +1394,20 @@ with tab1:
         line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='Strategy', color='royalblue', linewidth=1.0)
         line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='Benchmark', color='grey', linewidth=1.0)
         
-        # 1. 데이터가 실제로 시작하는 첫 날짜(NaN이 아닌 첫 값의 인덱스)를 찾습니다.
+        # 1. 데이터가 실제로 시작하고 끝나는 날짜를 찾습니다.
         first_valid_date = cumulative_returns.first_valid_index()
-        # 2. 유효한 날짜가 있을 경우, 그래프의 X축 시작점으로 설정합니다.
-        if first_valid_date is not None:
-            ax.set_xlim(left=first_valid_date)        
+        last_valid_date = cumulative_returns.last_valid_index()
+
+        # 2. 유효한 날짜가 있을 경우, X축의 시작과 끝에 동적인 여백을 줍니다.
+        if first_valid_date is not None and last_valid_date is not None:
+            # 전체 기간의 약 2%에 해당하는 날짜 수를 계산하여 여백으로 사용
+            margin_days = (last_valid_date - first_valid_date).days * 0.02
+            
+            # 시작점은 여백만큼 앞으로, 끝점은 여백만큼 뒤로 설정
+            graph_start_date = first_valid_date - pd.DateOffset(days=margin_days)
+            graph_end_date = last_valid_date + pd.DateOffset(days=margin_days)
+            
+            ax.set_xlim(left=graph_start_date, right=graph_end_date)      
             
         legend_handles = [line1, line2, Patch(facecolor='lightgreen', label='Aggressive'), Patch(facecolor='lightyellow', label='Defensive')]
         ax.set_title('Cumulative Value Over Time', fontsize=16)
@@ -1828,6 +1837,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
