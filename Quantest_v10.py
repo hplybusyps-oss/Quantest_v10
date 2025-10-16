@@ -711,7 +711,12 @@ if run_button_clicked:
     
     
     with st.spinner('데이터 로딩 및 백테스트 실행 중...'):
-        prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, config['start_date'], config['end_date'])
+        # 1. 실제 데이터 요청 시작일을 계산 (백테스트 시작일 - 12개월)
+        # 13612U 전략의 가장 긴 기간이 12개월이므로 12개월을 빼줍니다.
+        data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=12)
+        
+        # 2. 계산된 시작일로 데이터를 요청합니다.
+        prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'])
         
         if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
@@ -742,6 +747,11 @@ if run_button_clicked:
             portfolio_returns = (daily_weights.shift(1) * daily_returns).sum(axis=1) - costs.where(rebal_dates_series, 0)
             benchmark_returns = daily_returns[config['benchmark']]
 
+        # 워밍업 기간(사전 로딩 기간)의 수익률 데이터를 제거합니다.
+        start_date_dt = pd.to_datetime(config['start_date'])
+        portfolio_returns = portfolio_returns[portfolio_returns.index >= start_date_dt]
+        benchmark_returns = benchmark_returns[benchmark_returns.index >= start_date_dt]
+        
         contribution_dates = target_weights.index
         cumulative_returns = calculate_cumulative_returns_with_dca(portfolio_returns, config['initial_capital'], config['monthly_contribution'], contribution_dates)
         benchmark_cumulative = calculate_cumulative_returns_with_dca(benchmark_returns, config['initial_capital'], config['monthly_contribution'], contribution_dates)
@@ -854,7 +864,7 @@ with tab1:
                     if 'config' in loaded_data:
                         st.session_state.config_to_load = loaded_data['config']
 
-                    st.session_state.toast_message = f"'{uploaded_file_tab1.name}' 파일을 성공적으로 불러왔습니다. 사이드바의 티커와 자산 목록이 업데이트 되었습니다."
+                    st.session_state.toast_message = f"**'{uploaded_file_tab1.name}' 파일 불러오기 완료**\n사이드바의 티커와 자산 목록이 업데이트 되었습니다."
                     st.rerun()  
                 except Exception as e:
                     st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
@@ -1755,6 +1765,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
