@@ -885,10 +885,18 @@ with tab1:
     if 'results' in st.session_state and st.session_state['results']:
         results = st.session_state['results']
         
+        # 1. 사용자가 설정한 실제 백테스트 시작일을 변수로 만듭니다.
+        backtest_start_date = pd.to_datetime(results['config']['start_date'])
+    
+        # 2. 표시될 모든 중간 데이터들을 이 날짜 기준으로 잘라냅니다.
+        results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
+        results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
+        results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
+        results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
+    
         # 불러온 결과의 이름 표시
         st.subheader(f"📑 결과 요약: {results.get('name', '신규 백테스트')}")
-
-        # --- 아래는 기존의 결과 표시 코드와 거의 동일합니다 ---
+        
         prices = results['prices']
         failed_tickers = results['failed_tickers']
         # [수정] 예전 .pkl 파일과 호환되도록 수정
@@ -920,24 +928,19 @@ with tab1:
         requested_start_date_str = pd.to_datetime(config['start_date']).strftime('%Y-%m-%d')
 
         # culprit_ticker가 이제 culprit_tickers (리스트)로 변경되었습니다.
-        if culprit_tickers:
-            culprit_names = []
-            for ticker in culprit_tickers:
-                name = ticker
-                if etf_df is not None:
-                    match = etf_df[etf_df['Ticker'] == ticker]
-                    if not match.empty:
-                        name = match.iloc[0]['Name']
-                culprit_names.append(f"'{name}'({ticker})")
-
-            # 원인 제공자가 하나일 때와 여러 개일 때 메시지를 다르게 구성
-            if len(culprit_tickers) == 1:
-                culprits_str = culprit_names[0]
-                reason_str = "의 데이터가 가장 늦게 시작되어"
-            else:
-                culprits_str = ', '.join(culprit_names)
-                reason_str = " 등의 데이터가 가장 늦게 시작되어"
-            
+        # 1. 실제 백테스트 시작일과 데이터 로딩 시작일을 변수로 저장
+        backtest_start_date_str = pd.to_datetime(config['start_date']).strftime('%Y-%m-%d')
+        data_load_start_date_str = prices.index[0].strftime('%Y-%m-%d')
+    
+        # 2. 두 날짜가 다를 경우에만 "워밍업" 안내 메시지를 표시
+        if data_load_start_date_str < backtest_start_date_str:
+            st.info(
+                f"💡 정확한 모멘텀 계산을 위해 **{data_load_start_date_str}**부터 데이터를 미리 불러왔습니다.\n\n"
+                f"실제 백테스트와 모든 성과 분석은 설정하신 시작일인 **{backtest_start_date_str}**부터 시작됩니다."
+            )
+        # 3. 늦게 상장된 종목이 있어 시작일이 밀린 경우 (기존 로직)
+        elif culprit_tickers:
+            # ... (이 부분은 기존 코드와 동일하게 유지) ...
             st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
         
         # 특정 원인 제공자는 없지만, 주말/휴일 등의 이유로 시작일이 변경된 경우
@@ -1769,6 +1772,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
