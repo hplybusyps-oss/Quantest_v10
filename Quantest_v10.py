@@ -955,7 +955,9 @@ with tab1:
                 reason_str = " 등의 데이터가 가장 늦게 시작되어"
             
             st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{data_load_start_date_str}**부터 백테스트를 시작합니다.")
-    
+            max_momentum_period = results.get('max_momentum_period', 12)
+            st.info(f"💡 **주의:** 설정된 최대 모멘텀 기간({max_momentum_period}개월)보다 데이터가 부족하여, 백테스트 초기에는 불완전한 모멘텀 점수가 사용됩니다.")
+
         # 시나리오 2: 워밍업 기간이 있는 경우
         elif data_load_start_date_str < user_start_date_str:
             st.info(
@@ -1802,6 +1804,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
