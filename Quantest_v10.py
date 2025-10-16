@@ -946,46 +946,30 @@ with tab1:
             # 이 경우는 데이터가 사용자 시작일 이전에 끝나버린 예외적인 상황
             analysis_start_date_str = "데이터 없음"
     
-    
-        # 2. 시나리오에 따라 적절한 메시지를 표시합니다.
-        
-        # 시나리오 1: 상장일이 늦어 백테스트가 지연된 경우 (가장 중요)
+        # 1단계: 백테스트 시작 사유에 대한 기본 메시지 표시
+        # (이전과 동일한 if/elif/else 로직)
         if culprit_tickers:
-            # (culprit_tickers 관련 변수 생성 로직은 이전과 동일하게 유지)
-            culprit_names = []
-            for ticker in culprit_tickers:
-                name = ticker
-                if etf_df is not None:
-                    match = etf_df[etf_df['Ticker'] == ticker]
-                    if not match.empty:
-                        name = match.iloc[0]['Name']
-                culprit_names.append(f"'{name}'({ticker})")
-    
-            if len(culprit_tickers) == 1:
-                culprits_str = culprit_names[0]
-                reason_str = "의 데이터가 가장 늦게 시작되어"
-            else:
-                culprits_str = ', '.join(culprit_names)
-                reason_str = " 등의 데이터가 가장 늦게 시작되어"
-            
+            # ... (culprit_tickers 관련 변수 생성 및 st.warning) ...
             st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{data_load_start_date_str}**부터 백테스트를 시작합니다.")
-
-        # 시나리오 2: 워밍업 기간이 있는 경우
         elif data_load_start_date_str < user_start_date_str:
             st.info(
                 f"💡 정확한 모멘텀 계산을 위해 **{data_load_start_date_str}**부터 데이터를 미리 불러왔습니다.\n\n"
                 f"실제 백테스트와 모든 성과 분석은 요청하신 기간의 첫 거래일인 **{analysis_start_date_str}**부터 시작됩니다."
             )
-            max_momentum_period = results.get('max_momentum_period', 12)
-            st.info(f"💡 **주의:** 설정된 최대 모멘텀 기간({max_momentum_period}개월)보다 데이터가 부족하여, 백테스트 초기에는 불완전한 모멘텀 점수가 사용됩니다.")           
-        
-        # 시나리오 3: 워밍업은 없지만, 시작일이 공휴일/주말이라 보정된 경우
         elif analysis_start_date_str > user_start_date_str:
             st.info(f"💡 요청하신 기간의 첫 거래일인 **{analysis_start_date_str}**부터 백테스트를 시작합니다.")
-    
-        # 시나리오 4: 모든 날짜가 정확히 일치하는 완벽한 경우
         else:
             st.success(f"✅ 백테스트가 설정하신 시작일인 **{user_start_date_str}**에 맞춰 정상적으로 시작됩니다.")
+    
+        # 2단계: 워밍업 기간이 충분했는지 독립적으로 확인하고, 필요 시 추가 안내
+        max_momentum_period = results.get('max_momentum_period', 12)
+        data_load_start_date = prices.index[0]
+        
+        # 실제 워밍업 기간을 월 단위로 계산
+        available_warmup_months = (analysis_start_date.year - data_load_start_date.year) * 12 + (analysis_start_date.month - data_load_start_date.month)
+    
+        if available_warmup_months < max_momentum_period:
+            st.info(f"💡 **참고:** 설정된 최대 모멘텀 기간({max_momentum_period}개월)보다 실제 데이터 기간이 짧아, 백테스트 초기에는 불완전한 모멘텀 점수가 사용됩니다.")
 
         if failed_tickers: 
             st.warning(f"다운로드에 실패한 티커가 있습니다: {', '.join(failed_tickers)}")    
@@ -1818,6 +1802,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
