@@ -688,40 +688,51 @@ if st.session_state.get('settings_changed', False) and not run_button_clicked:
 
 # '백테스트 실행' 버튼을 다시 생성하고, 모든 계산/실행 로직을 이 버튼 안으로 이동
 if run_button_clicked:
+    # --- 1. 실행 준비 ---
     st.session_state.source = 'new_run'
     if 'uploader_key' not in st.session_state:
         st.session_state.uploader_key = 0
     st.session_state.uploader_key += 1
-    
-    # 2. 상태 업데이트 로직을 블록의 맨 앞으로 이동
-    #    이렇게 하면 이 블록이 실행되는 즉시 '변경됨' 상태가 해제됩니다.
-    st.session_state.last_run_config = current_config # 사이드바에서 이미 만든 current_config 사용
+
+    st.session_state.last_run_config = current_config
     st.session_state.settings_changed = False
     st.session_state.toast_shown = False
-    
-    # config 변수를 current_config로 대체하거나 그대로 사용
-    config = current_config 
-    
+    config = current_config
+
+    # --- 2. 동적 워밍업 기간 계산 ---
+    # 설정에서 최대 모멘텀 기간을 동적으로 계산합니다.
+    momentum_params = config.get('momentum_params', {})
+    if momentum_params.get('type') == '13612U':
+        max_momentum_period = 12
+    else:
+        periods = momentum_params.get('periods', [1])
+        max_momentum_period = max(periods) if periods else 1
+
+    # 계산된 최대 기간만큼 데이터를 미리 불러올 시작일을 정합니다.
+    data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=max_momentum_period)
+
+    # --- 3. 데이터 로딩 ---
+    # 데이터 로딩에 필요한 모든 티커를 미리 준비합니다.
     all_tickers = sorted(list(set(aggressive_tickers + defensive_tickers + canary_tickers + [benchmark_ticker])))
     
+    # 통화 기호를 결정합니다.
     if any(ticker.endswith('.KS') for ticker in all_tickers):
         currency_symbol = '₩'
     else:
         currency_symbol = '$'
-    
-    
+
     with st.spinner('데이터 로딩 및 백테스트 실행 중...'):
-        # 1. 실제 데이터 요청 시작일을 계산 (백테스트 시작일 - 12개월)
-        # 13612U 전략의 가장 긴 기간이 12개월이므로 12개월을 빼줍니다.
-        data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=12)
-        
-        # 2. 계산된 시작일로 데이터를 요청합니다.
-        prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'], config['start_date'])
-        
+        prices, failed_tickers, culprit_tickers = get_price_data(
+            all_tickers,
+            data_fetch_start_date,
+            config['end_date'],
+            config['start_date']
+        )
         if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
             st.stop()
 
+        # --- 4. 백테스트 계산 (이 부분은 기존과 거의 동일) ---
         momentum_scores = calculate_signals(prices, config)
         if momentum_scores.empty: st.error("모멘텀 시그널 계산에 실패했습니다."); st.stop()
         
@@ -762,7 +773,7 @@ if run_button_clicked:
 
         strategy_dd = (strategy_growth / strategy_growth.cummax() - 1)
         benchmark_dd = (benchmark_growth / benchmark_growth.cummax() - 1)
-                
+              
         first_valid_date = cumulative_returns.first_valid_index()
         years = (cumulative_returns.index[-1] - first_valid_date).days / 365.25 if first_valid_date is not None else 0
         
@@ -784,9 +795,9 @@ if run_button_clicked:
         total_months = len(target_weights.index)
         num_contributions = total_months - 1 if total_months > 0 else 0
         
+        # --- 5. 최종 결과 저장 (한 번에 모든 데이터를 저장하여 오류 방지) ---
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
-
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
             'timeseries': {
@@ -811,25 +822,20 @@ if run_button_clicked:
                 'bm_volatility': bm_volatility, 'bm_sharpe_ratio': bm_sharpe_ratio, 'bm_win_rate': bm_win_rate,
             },
             'portfolio_returns': portfolio_returns,
-            'benchmark_returns': benchmark_returns
+            'benchmark_returns': benchmark_returns,
+            'max_momentum_period': max_momentum_period # 동적으로 계산한 기간 정보 추가
         }
-        st.session_state['results'].update(results_data) # update()를 사용하여 기존 딕셔너리에 추가
         
+        # --- 6. 실행 마무리 ---
         if 'backtest_save_name' in st.session_state:
             del st.session_state.backtest_save_name
         
-        # 1. 현재 설정을 '마지막 실행 설정'으로 저장합니다.
-        st.session_state.last_run_config = config
-        # 2. '변경됨' 상태와 '토스트 표시' 상태를 모두 False로 초기화합니다.
-        st.session_state.settings_changed = False
-        st.session_state.toast_shown = False       
         st.session_state.result_selector = "--- 새로운 백테스트 실행 ---"
 
     if 'last_uploaded_file_id' in st.session_state:
         del st.session_state['last_uploaded_file_id']
 
-    st.rerun()        
-
+    st.rerun()
 # --- 탭과 결과 표시는 '백테스트 실행' 버튼 블록 바깥에 위치 ---
 tab1, tab2 = st.tabs(["🚀 새로운 백테스트 결과", "📊 저장된 결과 비교"])
 
@@ -1790,6 +1796,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
