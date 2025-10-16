@@ -713,13 +713,27 @@ if run_button_clicked:
     
     
     with st.spinner('데이터 로딩 및 백테스트 실행 중...'):
-        # 1. 실제 데이터 요청 시작일을 계산 (백테스트 시작일 - 12개월)
-        # 13612U 전략의 가장 긴 기간이 12개월이므로 12개월을 빼줍니다.
-        data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=12)
+        # 1. 실제 데이터 요청 시작일을 동적으로 계산
+        # 모멘텀 계산에 필요한 최대 기간을 확인합니다.
+        mom_type = config['momentum_params']['type']
+        mom_periods = config['momentum_params']['periods']
+
+        if mom_type == '13612U':
+            # 13612U는 최대 12개월 수익률을 사용합니다.
+            max_momentum_period = 12
+        elif mom_periods:
+            # '평균 모멘텀' 또는 '상대 모멘텀'의 경우, 설정된 기간 중 가장 긴 값을 사용합니다.
+            max_momentum_period = max(mom_periods)
+        else:
+            # 예외적인 경우 (기간이 설정되지 않음)를 대비해 기본값 12개월을 사용합니다.
+            max_momentum_period = 12
+
+        # 백테스트 시작일로부터 최대 모멘텀 기간만큼 이전 날짜를 데이터 요청 시작일로 설정합니다.
+        data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=max_momentum_period)
         
         # 2. 계산된 시작일로 데이터를 요청합니다.
         prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'], config['start_date'])
-        
+                
         if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
             st.stop()
@@ -788,7 +802,7 @@ if run_button_clicked:
         
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
-
+            'max_momentum_period': max_momentum_period, # 계산된 최대 모멘텀 기간을 결과에 추가
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
             'timeseries': {
@@ -823,13 +837,13 @@ if run_button_clicked:
         st.session_state.last_run_config = config
         # 2. '변경됨' 상태와 '토스트 표시' 상태를 모두 False로 초기화합니다.
         st.session_state.settings_changed = False
-        st.session_state.toast_shown = False       
+        st.session_state.toast_shown = False        
         st.session_state.result_selector = "--- 새로운 백테스트 실행 ---"
 
     if 'last_uploaded_file_id' in st.session_state:
         del st.session_state['last_uploaded_file_id']
 
-    st.rerun()        
+    st.rerun()
 
 # --- 탭과 결과 표시는 '백테스트 실행' 버튼 블록 바깥에 위치 ---
 tab1, tab2 = st.tabs(["🚀 새로운 백테스트 결과", "📊 저장된 결과 비교"])
@@ -1804,6 +1818,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
