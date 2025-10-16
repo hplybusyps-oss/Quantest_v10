@@ -718,7 +718,7 @@ if run_button_clicked:
         data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=12)
         
         # 2. 계산된 시작일로 데이터를 요청합니다.
-        prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'])
+        prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'], config['start_date'])
         
         if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
@@ -1780,6 +1780,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
