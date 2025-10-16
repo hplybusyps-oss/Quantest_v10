@@ -925,26 +925,36 @@ with tab1:
 
         st.header("1. 데이터 로딩 정보")
         actual_start_date_str = prices.index[0].strftime('%Y-%m-%d')
-        requested_start_date_str = pd.to_datetime(config['start_date']).strftime('%Y-%m-%d')
-
-        # culprit_ticker가 이제 culprit_tickers (리스트)로 변경되었습니다.
-        # 1. 실제 백테스트 시작일과 데이터 로딩 시작일을 변수로 저장
         backtest_start_date_str = pd.to_datetime(config['start_date']).strftime('%Y-%m-%d')
-        data_load_start_date_str = prices.index[0].strftime('%Y-%m-%d')
     
-        # 2. 두 날짜가 다를 경우에만 "워밍업" 안내 메시지를 표시
-        if data_load_start_date_str < backtest_start_date_str:
+        # 2. "워밍업" 안내 메시지를 표시할지 결정합니다.
+        if actual_start_date_str < backtest_start_date_str:
             st.info(
-                f"💡 정확한 모멘텀 계산을 위해 **{data_load_start_date_str}**부터 데이터를 미리 불러왔습니다.\n\n"
+                f"💡 정확한 모멘텀 계산을 위해 **{actual_start_date_str}**부터 데이터를 미리 불러왔습니다.\n\n"
                 f"실제 백테스트와 모든 성과 분석은 설정하신 시작일인 **{backtest_start_date_str}**부터 시작됩니다."
             )
-        # 3. 늦게 상장된 종목이 있어 시작일이 밀린 경우 (기존 로직)
+        # 3. 늦게 상장된 종목이 있어 시작일이 밀린 경우, 메시지에 필요한 변수를 생성하고 경고를 표시합니다.
         elif culprit_tickers:
-            # ... (이 부분은 기존 코드와 동일하게 유지) ...
+            culprit_names = []
+            for ticker in culprit_tickers:
+                name = ticker
+                if etf_df is not None:
+                    match = etf_df[etf_df['Ticker'] == ticker]
+                    if not match.empty:
+                        name = match.iloc[0]['Name']
+                culprit_names.append(f"'{name}'({ticker})")
+    
+            if len(culprit_tickers) == 1:
+                culprits_str = culprit_names[0]
+                reason_str = "의 데이터가 가장 늦게 시작되어"
+            else:
+                culprits_str = ', '.join(culprit_names)
+                reason_str = " 등의 데이터가 가장 늦게 시작되어"
+            
             st.warning(f"⚠️ {culprits_str} {reason_str}, 모든 자산이 존재하는 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
         
-        # 특정 원인 제공자는 없지만, 주말/휴일 등의 이유로 시작일이 변경된 경우
-        elif actual_start_date_str > requested_start_date_str:
+        # 4. 주말/휴일 등의 이유로 시작일이 변경된 경우
+        elif actual_start_date_str > backtest_start_date_str:
             st.info(f"💡 요청하신 기간의 첫 거래일인 **{actual_start_date_str}**부터 백테스트를 시작합니다.")
 
         if failed_tickers: 
@@ -1772,6 +1782,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
