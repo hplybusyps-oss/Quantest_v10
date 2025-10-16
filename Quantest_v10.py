@@ -868,7 +868,7 @@ with tab1:
                     if 'config' in loaded_data:
                         st.session_state.config_to_load = loaded_data['config']
 
-                    st.session_state.toast_message = f"**'{uploaded_file_tab1.name}' 파일 불러오기 완료**\n사이드바의 티커와 자산 목록이 업데이트 되었습니다."
+                    st.session_state.toast_message = f"**'{uploaded_file_tab1.name}' 불러오기 완료**\n사이드바의 티커와 자산 목록이 업데이트 되었습니다."
                     st.rerun()  
                 except Exception as e:
                     st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
@@ -1769,6 +1769,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
