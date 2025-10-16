@@ -442,7 +442,7 @@ else:
 # 2. 백엔드 로직 (데이터 처리 및 백테스트)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def get_price_data(tickers, start, end):
+def get_price_data(tickers, start, end, user_start_date):
     try:
         # --- [수정] auto_adjust=False 옵션을 추가합니다 ---
         raw_data = yf.download(
@@ -484,12 +484,10 @@ def get_price_data(tickers, start, end):
         # 가장 늦은 날짜에 시작하는 모든 티커를 찾습니다.
         culprit_tickers = [ticker for ticker, date in start_dates.items() if date == actual_latest_start]
         
-        # 사용자가 요청한 날짜보다 실제 시작일이 늦은 경우에만 "culprit"으로 간주합니다.
-        # (주말이나 휴일 때문에 하루 이틀 늦게 시작하는 경우는 culprit으로 보지 않음)
-        user_start_date_first_trading_day = prices.index[0]
-        if actual_latest_start <= user_start_date_first_trading_day:
-             culprit_tickers = []
-
+        # 사용자가 요청한 진짜 시작일보다 실제 데이터 시작일이 늦은 경우에만 "culprit"으로 간주합니다.
+        if actual_latest_start <= pd.to_datetime(user_start_date):
+            culprit_tickers = [] # 워밍업 기간에 해당하는 경우는 원인 제공자가 없는 것으로 처리
+        
         final_prices = prices[successful_tickers].dropna(axis=0, how='any')
 
         return final_prices, failed_tickers, culprit_tickers
@@ -1782,6 +1780,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
