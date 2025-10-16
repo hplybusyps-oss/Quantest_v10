@@ -1400,8 +1400,8 @@ with tab1:
 
         # 2. 유효한 날짜가 있을 경우, X축의 시작과 끝에 동적인 여백을 줍니다.
         if first_valid_date is not None and last_valid_date is not None:
-            # 전체 기간의 약 2%에 해당하는 날짜 수를 계산하여 여백으로 사용
-            margin_days = (last_valid_date - first_valid_date).days * 0.02
+            # 전체 기간의 약 5%에 해당하는 날짜 수를 계산하여 여백으로 사용
+            margin_days = (last_valid_date - first_valid_date).days * 0.05
             
             # 시작점은 여백만큼 앞으로, 끝점은 여백만큼 뒤로 설정
             graph_start_date = first_valid_date - pd.DateOffset(days=margin_days)
@@ -1837,6 +1837,7 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
 
 
 
