@@ -256,8 +256,8 @@ with st.sidebar.expander("티커 관리"):
     
     current_stocks_df = load_Stock_list()
     if current_stocks_df is not None:
-        # 사이드바에서는 소형(3~4행)으로 표시, fullscreen 버튼으로 전체 확인 가능
-        st.dataframe(current_stocks_df, height=150, use_container_width=True)
+        # 높이 제한(height=150)을 해제하여 전체화면 시 화면에 가득 차도록 수정
+        st.dataframe(current_stocks_df, use_container_width=True)
     else:
         st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
 
@@ -453,9 +453,8 @@ if strategy_mode == 'A-Core (신규)':
         ma_period_acore = st.number_input(
             "이동평균선 기간 (일)",
             min_value=20, max_value=400, value=200, step=10,
-            help="S&P500 지수의 이동평균선 기간입니다. 기본값 200일."
+            help="S&P500 지수의 이동평균선 기간입니다. 기본값 200일.\n\n[국면 판단 기준]\n- 강세: TIP 모멘텀>0 & S&P500 > MA\n- 중립: TIP 모멘텀>0 & S&P500 < MA\n- 약세: TIP 모멘텀 ≤ 0"
         )
-        st.caption("강세: TIP 모멘텀>0 & S&P500 > MA  |  중립: TIP 모멘텀>0 & S&P500 < MA  |  약세: TIP 모멘텀 ≤ 0")
     
     with st.sidebar.expander("📊 랭킹 & 위험관리 설정", expanded=True):
         vol_window_acore = st.number_input(
@@ -480,13 +479,10 @@ if strategy_mode == 'A-Core (신규)':
         # 선택된 공격 자산 티커 목록
         _agg_tickers_for_cat = [s.split(' - ')[0] for s in st.session_state.get('selected_aggressive', [])]
 
-        CATEGORY_OPTIONS = ['주식', '대체', '채권', '리츠', '안전자산']
+        CATEGORY_OPTIONS = ['주식', '대체']
         _CAT_COLORS = {
             '주식':    '#1f77b4',
             '대체':    '#ff7f0e',
-            '채권':    '#2ca02c',
-            '리츠':    '#9467bd',
-            '안전자산': '#d62728',
         }
 
         # 기본 자동 추론 힌트
@@ -1272,6 +1268,13 @@ if run_button_clicked:
                 target_weights, investment_mode, phase_scores_log = construct_acore_portfolio(
                     prices, config, prices.columns.tolist(), market_phase_series
                 )
+                
+                # --- [추가] 표와 그래프에 A-Core 국면별 점수가 나오도록 덮어쓰기 ---
+                dynamic_mom_scores = pd.DataFrame(index=market_phase_series.index, columns=prices.columns, dtype=float)
+                for date in market_phase_series.index:
+                    phase = market_phase_series.get(date, '약세')
+                    dynamic_mom_scores.loc[date] = calculate_acore_momentum(date, prices, config, phase)
+                momentum_scores = dynamic_mom_scores 
         else:
             target_weights, investment_mode = construct_portfolio(momentum_scores, config, prices.columns.tolist())
         # ─────────────────────────────────────────────────────────────────
@@ -2078,8 +2081,9 @@ with tab1:
             ax2.tick_params(axis='x', rotation=45); ax2.grid(axis='y', linestyle='--', linewidth=0.5); st.pyplot(fig2)
 
         st.subheader("📉 하락폭(Drawdown) 추이")
-        strategy_dd = (strategy_growth / strategy_growth.cummax() - 1)
-        benchmark_dd = (benchmark_growth / benchmark_growth.cummax() - 1)
+        # 데이터 타입 오류 방지를 위해 astype(float).fillna(0) 추가
+        strategy_dd = (strategy_growth / strategy_growth.cummax() - 1).astype(float).fillna(0)
+        benchmark_dd = (benchmark_growth / benchmark_growth.cummax() - 1).astype(float).fillna(0)
         fig3, ax3 = plt.subplots(figsize=(10, 5))
         ax3.plot(strategy_dd.index, strategy_dd, label='Strategy Drawdown', color='royalblue', linewidth=1.0)
         ax3.plot(benchmark_dd.index, benchmark_dd, label='Benchmark Drawdown', color='grey', linewidth=1.0)
