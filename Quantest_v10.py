@@ -473,34 +473,12 @@ if strategy_mode == 'A-Core (신규)':
             help="최근 1개월 변동성이 [12개월 평균 + (표준편차 × 임계값)]을 초과하면 과변동성으로 판단합니다."
         )
     
-    with st.sidebar.expander("🗂️ A-Core 자산 카테고리 설정"):
-        st.caption("각 카테고리에 공격 자산을 배치하세요. 지정되지 않은 자산은 '기타'로 분류됩니다.")
+    with st.sidebar.expander("🗂️ A-Core 자산 카테고리 설정", expanded=True):
+        st.caption("대체 자산에 해당하는 종목만 선택해 주세요. 선택되지 않은 나머지 공격 자산은 모두 '주식'으로 자동 분류됩니다.")
 
         # 선택된 공격 자산 티커 목록
         _agg_tickers_for_cat = [s.split(' - ')[0] for s in st.session_state.get('selected_aggressive', [])]
 
-        CATEGORY_OPTIONS = ['주식', '대체']
-        _CAT_COLORS = {
-            '주식':    '#1f77b4',
-            '대체':    '#ff7f0e',
-        }
-
-        # 기본 자동 추론 힌트
-        _DEFAULT_CAT_HINTS = {
-            'SPY': '주식', 'QQQ': '주식', 'IWM': '주식', 'EFA': '주식', 'VWO': '주식',
-            'EWJ': '주식', 'INDA': '주식', 'EWZ': '주식', 'FXI': '주식',
-            'VNQ': '리츠', 'IYR': '리츠', 'RWX': '리츠',
-            'GLD': '대체', 'IAU': '대체', 'SLV': '대체', 'DBC': '대체', 'USO': '대체', 'PDBC': '대체',
-            'TIP': '채권', 'IEF': '채권', 'TLT': '채권', 'BND': '채권', 'AGG': '채권', 'LQD': '채권',
-            'BIL': '안전자산', 'SHV': '안전자산', 'SHY': '안전자산',
-        }
-
-        # session_state에서 카테고리별 선택 목록 초기화
-        # 구조: {'주식': ['SPY','QQQ'], '대체': ['GLD'], ...}
-        if 'acore_cat_buckets' not in st.session_state:
-            st.session_state.acore_cat_buckets = {cat: [] for cat in CATEGORY_OPTIONS}
-
-        # 공격 자산이 없으면 안내
         if not _agg_tickers_for_cat:
             st.info("공격 자산을 먼저 선택하면 카테고리를 지정할 수 있습니다.")
             acore_category_map = {}
@@ -516,64 +494,40 @@ if strategy_mode == 'A-Core (신규)':
                         label = f"{tk} — {nm[:14]}…" if len(nm) > 14 else f"{tk} — {nm}"
                 _tk_labels[tk] = label
 
-            # 카테고리별 multiselect — 각 바구니에 자산을 드래그·클릭으로 담기
-            # 이미 다른 카테고리에 담긴 자산은 해당 카테고리의 options에서 제외
             _all_labels = list(_tk_labels.values())
             _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
-            # 초기 기본값 계산 (처음 열 때 힌트 기반으로 배치)
-            def _build_default(cat):
-                saved = st.session_state.acore_cat_buckets.get(cat, [])
-                if saved:
-                    return [_tk_labels[t] for t in saved if t in _tk_labels]
-                # 힌트 기반 기본값
-                return [_tk_labels[t] for t in _agg_tickers_for_cat
-                        if _DEFAULT_CAT_HINTS.get(t.upper(), '기타') == cat and t in _tk_labels]
+            # 대체 자산 기본 자동 추론 힌트 (원자재, 금 등)
+            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC']
+            _valid_default_alt = [_tk_labels[t] for t in _agg_tickers_for_cat if t.upper() in _DEFAULT_ALT_HINTS and t in _tk_labels]
 
-            # --- [추가] 세션 상태를 기반으로 전체 카테고리에 이미 할당된 자산을 미리 파악 (완벽한 상호 배제) ---
-            all_assigned_tickers = set()
-            for c in CATEGORY_OPTIONS:
-                all_assigned_tickers.update(st.session_state.acore_cat_buckets.get(c, []))
+            # 오직 '대체 자산'만 다중 선택 위젯으로 구현
+            st.markdown("**대체 자산 선택**")
+            chosen_alt_labels = st.multiselect(
+                "",
+                options=_all_labels,
+                default=_valid_default_alt,
+                key='acore_bucket_alt',
+                label_visibility='collapsed'
+            )
+            
+            chosen_alt_tickers = [_label_to_tk[lb] for lb in chosen_alt_labels]
 
+            # 카테고리 맵 생성 (선택된 것은 '대체', 나머지는 모두 '주식')
             acore_category_map = {}
-            _assigned = set()
-
-            for cat in CATEGORY_OPTIONS:
-                # --- [수정] 색상이 들어간 span 태그를 지우고 일반 텍스트(굵게)로 통일 ---
-                st.markdown(f"**{cat}**")
-                
-                # --- [수정] 현재 카테고리를 제외한 '다른 카테고리'에 선택된 자산만 목록에서 숨김 ---
-                other_cats_assigned = all_assigned_tickers - set(st.session_state.acore_cat_buckets.get(cat, []))
-                _available = [lb for lb in _all_labels if _label_to_tk[lb] not in other_cats_assigned]
-
-                _prev_default = _build_default(cat)
-                _valid_default = [lb for lb in _prev_default if lb in _available]
-
-                chosen_labels = st.multiselect(
-                    f"",
-                    options=_available,
-                    default=_valid_default,
-                    key=f'acore_bucket_{cat}',
-                    label_visibility='collapsed'
-                )
-                chosen_tickers = [_label_to_tk[lb] for lb in chosen_labels]
-                
-                # 현재 선택된 자산 업데이트
-                st.session_state.acore_cat_buckets[cat] = chosen_tickers
-                _assigned.update(chosen_tickers)
-                
-                for tk in chosen_tickers:
-                    acore_category_map[tk] = cat
-
-            # 배정 안 된 자산은 '기타'로 자동 분류
             for tk in _agg_tickers_for_cat:
-                if tk not in acore_category_map:
-                    acore_category_map[tk] = '기타'
+                if tk in chosen_alt_tickers:
+                    acore_category_map[tk] = '대체'
+                else:
+                    acore_category_map[tk] = '주식'
 
-            # 미배정 자산 안내
-            _unassigned = [tk for tk in _agg_tickers_for_cat if acore_category_map.get(tk) == '기타']
-            if _unassigned:
-                st.caption(f"⚠️ '기타'로 분류: {', '.join(_unassigned)}")
+            # 현재 어떻게 분류되었는지 직관적으로 보여주는 텍스트 안내
+            _alt_list = [tk for tk, cat in acore_category_map.items() if cat == '대체']
+            _eq_list = [tk for tk, cat in acore_category_map.items() if cat == '주식']
+            
+            st.markdown("---")
+            st.markdown(f"<span style='color:#ff7f0e; font-weight:bold;'>대체 자산:</span> {', '.join(_alt_list) if _alt_list else '없음'}", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:#1f77b4; font-weight:bold;'>주식 자산:</span> {', '.join(_eq_list) if _eq_list else '없음'}", unsafe_allow_html=True)
     
     acore_config = {
         'sp500_ticker': sp500_ticker_acore,
