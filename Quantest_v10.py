@@ -498,7 +498,7 @@ if strategy_mode == 'A-Core':
             _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
             # 대체 자산 기본 자동 추론 힌트 (원자재, 금 등)
-            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC']
+            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', GNR, VNQ, IYR]
             _valid_default_alt = [_tk_labels[t] for t in _agg_tickers_for_cat if t.upper() in _DEFAULT_ALT_HINTS and t in _tk_labels]
 
             # 오직 '대체 자산'만 다중 선택 위젯으로 구현
