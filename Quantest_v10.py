@@ -54,9 +54,8 @@ st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크 v1
 
 # --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
 if 'toast_message' in st.session_state:
-    # session_state에 저장된 메시지를 toast로 표시
+    # session_state에 저장된 메시지를 toast로 표시 (아이콘은 메시지 종류에 따라 다름)
     st.toast(st.session_state.toast_message, icon="✅")
-    # 메시지를 한 번만 표시하기 위해 바로 삭제
     del st.session_state.toast_message
 
 @st.cache_data
@@ -568,13 +567,19 @@ current_config = gather_current_config()
 
 # 마지막 실행 설정이 있고, 현재 설정과 다를 경우 '변경됨' 플래그를 True로 설정
 if 'last_run_config' in st.session_state:
-    settings_are_different = (st.session_state.last_run_config != current_config)
+    try:
+        settings_are_different = (st.session_state.last_run_config != current_config)
+        # dict 비교 결과가 bool이 아닌 경우(예: Series 포함) 안전하게 처리
+        if not isinstance(settings_are_different, bool):
+            settings_are_different = bool(settings_are_different)
+    except Exception:
+        settings_are_different = True
     st.session_state.settings_changed = settings_are_different
 
     # 설정이 변경되었고, 아직 토스트 알림을 보여주지 않았다면
     if settings_are_different and not st.session_state.get('toast_shown', False):
         st.toast("⚙️ 설정이 변경되었습니다!", icon="💡")
-        st.session_state.toast_shown = True # 알림을 보여줬다고 기록
+        st.session_state.toast_shown = True
 else:
     st.session_state.settings_changed = False
 
@@ -590,7 +595,7 @@ def get_price_data(tickers, start, end, user_start_date):
         raw_data = yf.download(
             tickers, 
             start=start, 
-            end=end, 
+            end=pd.to_datetime(end) + pd.DateOffset(days=1),  # yfinance end는 exclusive이므로 +1일
             progress=False,
             auto_adjust=False  # 이 옵션을 추가하면 'Adj Close' 컬럼이 포함됩니다.
         )
@@ -599,12 +604,25 @@ def get_price_data(tickers, start, end, user_start_date):
             st.error("데이터를 다운로드하지 못했습니다."); 
             return None, None, None
 
-        # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
-        if 'Adj Close' in raw_data.columns:
-            prices = raw_data['Adj Close'].copy()
+        # yfinance MultiIndex 처리: 단일 티커도 MultiIndex를 반환할 수 있음
+        if isinstance(raw_data.columns, pd.MultiIndex):
+            # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
+            if 'Adj Close' in raw_data.columns.get_level_values(0):
+                prices = raw_data['Adj Close'].copy()
+            else:
+                st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
+                prices = raw_data['Close'].copy()
         else:
-            st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
-            prices = raw_data['Close'].copy()
+            # 단일 티커이거나 flat 컬럼 구조
+            if 'Adj Close' in raw_data.columns:
+                prices = raw_data['Adj Close'].copy()
+            else:
+                st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
+                prices = raw_data['Close'].copy()
+        
+        # 단일 티커인 경우 Series → DataFrame으로 변환
+        if isinstance(prices, pd.Series):
+            prices = prices.to_frame(name=tickers[0] if len(tickers) == 1 else 'Price')
         
         prices.dropna(axis=0, how='all', inplace=True)
         
@@ -637,7 +655,10 @@ def get_price_data(tickers, start, end, user_start_date):
         st.error(f"데이터 다운로드 중 오류 발생: {e}"); return None, None, None
 
 def calculate_cumulative_returns_with_dca(returns_series, initial_capital, monthly_contribution, contribution_dates):
-    """적립식 투자를 반영하여 누적 자산 가치를 계산하는 함수"""
+    """적립식 투자를 반영하여 누적 자산 가치를 계산하는 함수
+    
+    로직: 매 리밸런싱 기준일에 추가 투자금이 입금된 후, 해당 기간 수익률이 적용됩니다.
+    """
     portfolio_values = []
     current_capital = initial_capital
 
@@ -645,12 +666,12 @@ def calculate_cumulative_returns_with_dca(returns_series, initial_capital, month
     contribution_dates_set = set(contribution_dates)
 
     for date, ret in returns_series.items():
-        # 수익률에 따라 자산 가치 업데이트
-        current_capital *= (1 + ret)
-        
-        # 추가 투자일인 경우, 해당 월의 추가 투자금 입금
+        # 추가 투자일인 경우, 수익률 적용 전에 추가 투자금 입금
         if date in contribution_dates_set and monthly_contribution > 0:
             current_capital += monthly_contribution
+            
+        # 수익률에 따라 자산 가치 업데이트
+        current_capital *= (1 + ret)
             
         portfolio_values.append(current_capital)
     
@@ -670,14 +691,15 @@ def calculate_full_momentum(prices, config):
     returns_dfs = []
     for month in mom_periods:
         # shift를 사용하여 과거 가격 대비 수익률 계산
-        returns_dfs.append(prices.pct_change(periods=month * 21).fillna(0))
+        ret = prices.pct_change(periods=month * 21)
+        returns_dfs.append(ret)
         
     # 모든 기간의 수익률을 합산하여 평균
     if not returns_dfs:
         return pd.DataFrame(0, index=prices.index, columns=prices.columns)
         
     full_momentum_scores = sum(returns_dfs) / len(returns_dfs)
-    return full_momentum_scores
+    return full_momentum_scores.fillna(0)
 
 # =============================================================================
 #   [A-Core 신규] 핵심 백엔드 로직 함수
@@ -718,14 +740,13 @@ def determine_market_phase(prices: pd.DataFrame, canary_tickers: list, config: d
     mom_type = config['momentum_params']['type']
     mom_periods = [1, 3, 6, 12] if mom_type == '13612U' else config['momentum_params'].get('periods', [1, 3, 6, 12])
 
-    market_phase = pd.Series(index=rebal_dates, dtype=str)
+    market_phase = pd.Series('약세', index=rebal_dates, dtype=str)
 
     for date in rebal_dates:
         # 1. 카나리아 평균 모멘텀 계산 (TIP 모멘텀)
         valid_canary = [t for t in canary_tickers if t in prices.columns]
         if not valid_canary:
-            market_phase[date] = '약세'
-            continue
+            continue  # 기본값 '약세' 유지
 
         returns_list = []
         for month in mom_periods:
@@ -736,14 +757,16 @@ def determine_market_phase(prices: pd.DataFrame, canary_tickers: list, config: d
             idx = prices.index.get_indexer([past_date], method='nearest')[0]
             past_prices = prices.iloc[idx][valid_canary]
             curr_prices = prices.loc[date, valid_canary]
-            returns_list.append(curr_prices / past_prices - 1)
+            # 0으로 나누기 방지
+            with np.errstate(divide='ignore', invalid='ignore'):
+                ret = np.where(past_prices != 0, curr_prices / past_prices - 1, 0.0)
+            returns_list.append(pd.Series(ret, index=valid_canary))
 
         canary_momentum = sum(returns_list) / len(returns_list)
         avg_canary_score = canary_momentum.mean() if not canary_momentum.empty else -1
 
-        # 2. 약세 국면: 카나리아 모멘텀 <= 0
+        # 2. 약세 국면: 카나리아 모멘텀 <= 0 → 기본값 유지
         if avg_canary_score <= 0:
-            market_phase[date] = '약세'
             continue
 
         # 3. 강세/중립 국면: S&P500 vs MA 비교
@@ -751,14 +774,10 @@ def determine_market_phase(prices: pd.DataFrame, canary_tickers: list, config: d
             sp500_price_idx = prices.index.get_indexer([date], method='nearest')[0]
             sp500_price = prices.iloc[sp500_price_idx].get(sp500_ticker, None)
             if sp500_price is not None and not pd.isna(sp500_price):
-                if sp500_price > sp500_ma.loc[date]:
-                    market_phase[date] = '강세'
-                else:
-                    market_phase[date] = '중립'
+                market_phase[date] = '강세' if sp500_price > sp500_ma.loc[date] else '중립'
             else:
                 market_phase[date] = '중립'
         else:
-            # S&P500 데이터 없으면 중립으로 처리
             market_phase[date] = '중립'
 
     return market_phase
@@ -907,10 +926,10 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
         # ── 약세 국면: 방어 자산 중 모멘텀 1위 100% 집중 ──────────────────
         if phase == '약세':
             investment_mode[date] = '약세 (Defensive)'
+            mom_all = calculate_acore_momentum(date, prices, config, '약세')  # 한 번만 계산
             def_scores = {}
             for ticker in defensive_assets:
-                mom = calculate_acore_momentum(date, prices, config, '약세')
-                mom_score = mom.get(ticker, np.nan) if hasattr(mom, 'get') else (mom[ticker] if ticker in mom.index else np.nan)
+                mom_score = mom_all.get(ticker, np.nan) if hasattr(mom_all, 'get') else (mom_all[ticker] if ticker in mom_all.index else np.nan)
                 # 절대 모멘텀 필터 & 변동성 필터
                 if pd.isna(mom_score) or mom_score <= 0:
                     continue
@@ -923,9 +942,12 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
                 target_weights.loc[date, best_def] = 1.0
                 phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': [best_def]}
             else:
-                # 방어 자산도 없으면 가장 모멘텀 높은 방어 자산으로 fallback
+                # 방어 자산도 모멘텀 양수인 것이 없으면 모든 방어 자산 중 최고 모멘텀으로 fallback
                 if defensive_assets:
-                    target_weights.loc[date, defensive_assets[0]] = 1.0
+                    all_def_scores = {t: mom_all.get(t, -np.inf) if hasattr(mom_all, 'get') else (mom_all[t] if t in mom_all.index else -np.inf) for t in defensive_assets}
+                    best_fallback = max(all_def_scores, key=all_def_scores.get)
+                    target_weights.loc[date, best_fallback] = 1.0
+                    phase_scores_log[date] = {'phase': phase, 'scores': all_def_scores, 'selected': [best_fallback]}
             continue
 
         # ── 강세/중립 국면 ─────────────────────────────────────────────────
@@ -957,18 +979,20 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
             sharpe_scores[ticker] = mom_score / vol
 
         if not sharpe_scores:
-            # 공격 자산 없으면 방어 자산으로 대피
+            # 공격 자산 없으면 방어 자산으로 대피 (mom_scores 재활용)
             def_scores = {}
             for ticker in defensive_assets:
-                mom = calculate_acore_momentum(date, prices, config, phase)
-                ms = mom.get(ticker, np.nan) if hasattr(mom, 'get') else (mom[ticker] if ticker in mom.index else np.nan)
+                ms = mom_scores.get(ticker, np.nan) if hasattr(mom_scores, 'get') else (mom_scores[ticker] if ticker in mom_scores.index else np.nan)
                 if not pd.isna(ms) and ms > 0:
                     def_scores[ticker] = ms
             if def_scores:
                 best_def = max(def_scores, key=def_scores.get)
                 target_weights.loc[date, best_def] = 1.0
             elif defensive_assets:
-                target_weights.loc[date, defensive_assets[0]] = 1.0
+                # 마지막 fallback: 모든 방어 자산 중 모멘텀 최대
+                all_def_ms = {t: (mom_scores.get(t, -np.inf) if hasattr(mom_scores, 'get') else (mom_scores[t] if t in mom_scores.index else -np.inf)) for t in defensive_assets}
+                best_fb = max(all_def_ms, key=all_def_ms.get)
+                target_weights.loc[date, best_fb] = 1.0
             phase_scores_log[date] = {'phase': phase, 'scores': {}, 'selected': []}
             continue
 
@@ -1007,7 +1031,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
 
 
 def calculate_signals(prices, config):
-    prices_copy = prices.copy()  # ← NameError 수정: prices_copy 정의 누락 보완
+    prices_copy = prices.copy()
     day_option = 'last' if config['rebalance_day'] == '월말' else 'first'
     if config['rebalance_freq'] == '분기별':
         prices_copy['year_quarter'] = prices_copy.index.to_period('Q').strftime('%Y-Q%q')
@@ -1016,36 +1040,38 @@ def calculate_signals(prices, config):
         prices_copy['year_month'] = prices_copy.index.strftime('%Y-%m')
         rebal_dates = prices_copy.drop_duplicates('year_month', keep=day_option).index
 
-    momentum_scores = pd.DataFrame(index=rebal_dates, columns=prices.columns)
     mom_type = config['momentum_params']['type']
 
-    # --- CHANGED: '13612U' 선택 시 기간을 고정하도록 수정 ---
     if mom_type == '13612U':
         mom_periods = [1, 3, 6, 12]
     else:
         mom_periods = config['momentum_params']['periods']
 
-    # --- CHANGED: '13612U'와 '평균 모멘텀' 로직 통합 및 '절대 모멘텀' 삭제 ---
     if mom_type in ['13612U', '평균 모멘텀']:
-        for date in rebal_dates:
-            returns = []
-            for month in mom_periods:
-                past_date = date - pd.DateOffset(months=month)
-                if past_date < prices.index[0]:
-                    returns.append(pd.Series(0.0, index=prices.columns))
-                    continue
-                past_price_idx = prices.index.get_indexer([past_date], method='nearest')[0]
-                returns.append(prices.loc[date] / prices.iloc[past_price_idx] - 1)
-            if returns:
-                valid_returns = [r for r in returns if not r.empty]
-                if valid_returns: momentum_scores.loc[date] = sum(valid_returns) / len(valid_returns)
-                else: momentum_scores.loc[date] = 0.0
-    
+        # 벡터화: 각 기간별 수익률을 한 번에 계산 후 평균
+        returns_list = []
+        prices_rebal = prices.reindex(rebal_dates)
+        for month in mom_periods:
+            # 거래일 기준 근사: 1개월 ≈ 21일 → prices에서 직접 shift
+            past_prices = prices.shift(month * 21).reindex(rebal_dates)
+            period_return = (prices_rebal / past_prices.replace(0, np.nan)) - 1
+            period_return = period_return.fillna(0)
+            returns_list.append(period_return)
+        if returns_list:
+            momentum_scores = sum(returns_list) / len(returns_list)
+        else:
+            momentum_scores = pd.DataFrame(0.0, index=rebal_dates, columns=prices.columns)
+
     elif mom_type == '상대 모멘텀':
-        if not mom_periods: st.error("모멘텀 기간이 설정되지 않았습니다."); return pd.DataFrame()
-        period_days = mom_periods[0] * 21 
+        if not mom_periods:
+            st.error("모멘텀 기간이 설정되지 않았습니다.")
+            return pd.DataFrame()
+        period_days = mom_periods[0] * 21
         momentum_scores = prices.pct_change(periods=period_days)
-        momentum_scores = momentum_scores.loc[rebal_dates].fillna(0)
+        momentum_scores = momentum_scores.reindex(rebal_dates).fillna(0)
+
+    else:
+        momentum_scores = pd.DataFrame(0.0, index=rebal_dates, columns=prices.columns)
             
     return momentum_scores.astype(float)
 
@@ -1095,8 +1121,13 @@ def construct_portfolio(momentum_scores, config, successful_tickers):
     return target_weights, investment_mode
 
 def get_mdd_details(series):
+    series = series.dropna()
+    if series.empty or len(series) < 2:
+        today = pd.Timestamp.today().normalize()
+        return 0.0, today, today
     rolling_max = series.cummax()
-    drawdown = (series - rolling_max) / rolling_max
+    drawdown = (series - rolling_max) / rolling_max.replace(0, np.nan)
+    drawdown = drawdown.fillna(0)
     mdd_value = drawdown.min()
     mdd_end_date = drawdown.idxmin()
     pre_trough_series = series.loc[:mdd_end_date]
@@ -1143,13 +1174,6 @@ st.markdown("<a id='top'></a>", unsafe_allow_html=True)
 
 
 st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.3")
-
-# session_state에 표시할 토스트 메시지가 저장되어 있는지 확인합니다.
-if 'toast_message' in st.session_state:
-    # 메시지를 화면에 표시합니다.
-    st.toast(st.session_state.toast_message, icon="💾")
-    # 메시지를 표시한 후에는 다시 표시되지 않도록 session_state에서 삭제합니다.
-    del st.session_state.toast_message
 
 run_button_clicked = st.button("백테스트 실행", type="primary")
 if st.session_state.get('settings_changed', False) and not run_button_clicked:
@@ -1247,7 +1271,7 @@ if run_button_clicked:
             costs = turnover * config['transaction_cost']
             portfolio_returns = (target_weights.shift(1) * returns_rebal).sum(axis=1) - costs
             portfolio_returns = portfolio_returns.fillna(0)
-            benchmark_returns = returns_rebal[config['benchmark']].fillna(0)
+            benchmark_returns = returns_rebal[config['benchmark']].fillna(0) if config['benchmark'] in returns_rebal.columns else pd.Series(0.0, index=returns_rebal.index)
         else: # 일별
             daily_weights = target_weights.reindex(prices.index, method='ffill').fillna(0)
             rebal_dates_series = pd.Series(index=prices.index, data=False)
@@ -1256,14 +1280,14 @@ if run_button_clicked:
             costs = turnover * config['transaction_cost']
             daily_returns = prices.pct_change().fillna(0)
             portfolio_returns = (daily_weights.shift(1) * daily_returns).sum(axis=1) - costs.where(rebal_dates_series, 0)
-            benchmark_returns = daily_returns[config['benchmark']]
+            benchmark_returns = daily_returns[config['benchmark']] if config['benchmark'] in daily_returns.columns else pd.Series(0.0, index=daily_returns.index)
 
         # 워밍업 기간(사전 로딩 기간)의 수익률 데이터를 제거합니다.
         start_date_dt = pd.to_datetime(config['start_date'])
         portfolio_returns = portfolio_returns[portfolio_returns.index >= start_date_dt]
         benchmark_returns = benchmark_returns[benchmark_returns.index >= start_date_dt]
         
-        contribution_dates = target_weights.index
+        contribution_dates = target_weights.index[target_weights.index >= start_date_dt]
         cumulative_returns = calculate_cumulative_returns_with_dca(portfolio_returns, config['initial_capital'], config['monthly_contribution'], contribution_dates)
         benchmark_cumulative = calculate_cumulative_returns_with_dca(benchmark_returns, config['initial_capital'], config['monthly_contribution'], contribution_dates)
         
@@ -1278,9 +1302,10 @@ if run_button_clicked:
         years = (cumulative_returns.index[-1] - first_valid_date).days / 365.25 if first_valid_date is not None else 0
         
         cagr, bm_cagr, mdd, bm_mdd, volatility, bm_volatility, sharpe_ratio, bm_sharpe_ratio, win_rate, bm_win_rate = (0,)*10
+        mdd_start = mdd_end = bm_mdd_start = bm_mdd_end = pd.Timestamp('1970-01-01')
         if years > 0:
-            cagr = (strategy_growth.iloc[-1]/initial_cap)**(1/years) - 1
-            bm_cagr = (benchmark_growth.iloc[-1]/initial_cap)**(1/years) - 1
+            cagr = (cumulative_returns.iloc[-1]/initial_cap)**(1/years) - 1
+            bm_cagr = (benchmark_cumulative.iloc[-1]/initial_cap)**(1/years) - 1
             mdd, mdd_start, mdd_end = get_mdd_details(strategy_growth)
             bm_mdd, bm_mdd_start, bm_mdd_end = get_mdd_details(benchmark_growth)
             trading_periods = 12 if returns_freq == '월별' else 252
@@ -1292,8 +1317,12 @@ if run_button_clicked:
             win_rate = (portfolio_returns > 0).sum() / len(portfolio_returns) if len(portfolio_returns) > 0 else 0
             bm_win_rate = (benchmark_returns > 0).sum() / len(benchmark_returns) if len(benchmark_returns) > 0 else 0
 
-        total_months = len(target_weights.index)
-        num_contributions = total_months - 1 if total_months > 0 else 0
+        # 실제 백테스트 기간 내 리밸런싱 날짜 기준으로 추가 입금 횟수 계산
+        start_date_dt = pd.to_datetime(config['start_date'])
+        rebal_in_period = target_weights.index[target_weights.index >= start_date_dt]
+        # 첫 번째 리밸런싱은 초기 투자이므로, 추가 입금은 두 번째부터
+        num_contributions = max(0, len(rebal_in_period) - 1)
+        total_contribution = config['initial_capital'] + (config['monthly_contribution'] * num_contributions)
         
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
@@ -1313,13 +1342,13 @@ if run_button_clicked:
             'investment_mode': investment_mode, 'target_weights': target_weights, 'initial_cap': initial_cap,
             'metrics': {
                 'final_assets': cumulative_returns.iloc[-1],
-                'total_contribution': config['initial_capital'] + (config['monthly_contribution'] * num_contributions),
-                'total_profit': cumulative_returns.iloc[-1] - (config['initial_capital'] + (config['monthly_contribution'] * num_contributions)),
+                'total_contribution': total_contribution,
+                'total_profit': cumulative_returns.iloc[-1] - total_contribution,
                 'cagr': cagr, 'mdd': mdd, 'mdd_start': mdd_start, 'mdd_end': mdd_end,
                 'volatility': volatility, 'sharpe_ratio': sharpe_ratio, 'win_rate': win_rate,
                 'bm_final_assets': benchmark_cumulative.iloc[-1],
-                'bm_total_contribution': config['initial_capital'] + (config['monthly_contribution'] * num_contributions),
-                'bm_total_profit': benchmark_cumulative.iloc[-1] - (config['initial_capital'] + (config['monthly_contribution'] * num_contributions)),
+                'bm_total_contribution': total_contribution,
+                'bm_total_profit': benchmark_cumulative.iloc[-1] - total_contribution,
                 'bm_cagr': bm_cagr, 'bm_mdd': bm_mdd, 'bm_mdd_start': bm_mdd_start, 'bm_mdd_end': bm_mdd_end,
                 'bm_volatility': bm_volatility, 'bm_sharpe_ratio': bm_sharpe_ratio, 'bm_win_rate': bm_win_rate,
             },
@@ -1440,6 +1469,7 @@ with tab1:
             analysis_start_date_str = analysis_start_date.strftime('%Y-%m-%d')
         else:
             # 이 경우는 데이터가 사용자 시작일 이전에 끝나버린 예외적인 상황
+            analysis_start_date = prices.index[0]  # fallback: 데이터 첫날
             analysis_start_date_str = "데이터 없음"
     
         # 1단계: 백테스트 시작 사유에 대한 기본 메시지 표시
@@ -1496,7 +1526,7 @@ with tab1:
                         full_name = match.iloc[0]['Name']
                 new_column_names.append(full_name)
             display_df.columns = new_column_names
-            st.dataframe(display_df.style.format("{:,.0f}"))
+            st.dataframe(display_df.style.format("{:,.2f}"))
             
         st.subheader("사용한 자산군 정보")
         config_tickers = config.get('tickers', {})
@@ -1585,7 +1615,7 @@ with tab1:
                 st.markdown("**A-Core 전략 설정**")
                 st.markdown(f"- S&P500 티커: `{ac.get('sp500_ticker', '^GSPC')}`")
                 st.markdown(f"- 이동평균 기간: `{ac.get('ma_period', 200)}일`")
-                st.markdown(f"- 변동성 계산 기간: `{ac.get('vol_window', 90)}일`")
+                st.markdown(f"- 변동성 계산 기간: `{ac.get('vol_window', 60)}일`")
                 st.markdown(f"- 카테고리 캡: `{ac.get('category_cap', 2)}`")
                 st.markdown(f"- Z-Score 임계값: `{ac.get('zscore_threshold', 1.5)}`")     
             
@@ -1766,10 +1796,11 @@ with tab1:
                               loc='upper left', fontsize=9)
 
                 ax_mom.set_title('카나리아 모멘텀 vs. 벤치마크 가격', fontsize=16)
-                ax_mom.set_xlabel('Date', fontsize=12)
+                ax_mom.set_xlabel('날짜', fontsize=12)
                 ax_mom.grid(True, which='both', ls='--', linewidth=0.4, alpha=0.6)
                 fig_mom.tight_layout()
                 st.pyplot(fig_mom)
+                plt.close(fig_mom)
             else:
                 st.warning("카나리아 또는 벤치마크 자산 데이터를 찾을 수 없습니다.")
 
@@ -1815,7 +1846,7 @@ with tab1:
                             df_to_display.rename(columns=ticker_to_name_map, inplace=True)
 
                         # 이름이 변경된 데이터프레임을 화면에 표시
-                        st.dataframe(df_to_display.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
+                        st.dataframe(df_to_display.style.format("{:.2%}").background_gradient(cmap='viridis', axis=1))
                         # --- ▲▲▲ 로직 추가 끝 ▲▲▲ ---
                     else:
                         st.dataframe(sorted_recent_scores)
@@ -1846,18 +1877,18 @@ with tab1:
                     y='Momentum Score',
                     color='Name',
                     title='구성종목 모멘텀 점수 추이',
-                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '종목명'},
+                    labels={'Date': '날짜', 'Momentum Score': '모멘텀 점수 (%)', 'Name': '종목명'},
                     hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
                     custom_data=['Ticker']
                 )
                 # 4. 툴팁(hovertemplate) 서식과 순서를 직접 지정
                 fig_interactive.update_traces(
                     hovertemplate=(
-                        "<b>%{hovertext}</b><br><br>" + # hovertext는 hover_name으로 지정된 'Name'을 의미 (맨 위 굵은 글씨)
-                        "티커: %{customdata[0]}<br>" +     # customdata[0]은 custom_data의 첫 번째 항목인 'Ticker'를 의미
-                        "모멘텀 점수: %{y:.3f}<br>" +      # y는 y축 값인 'Momentum Score'를 의미
-                        "날짜: %{x|%Y-%m-%d}" +            # x는 x축 값인 'Date'를 의미
-                        "<extra></extra>"                # Plotly에서 기본으로 붙는 추가 정보 박스 제거
+                        "<b>%{hovertext}</b><br><br>" +
+                        "티커: %{customdata[0]}<br>" +
+                        "모멘텀 점수: %{y:.2%}<br>" +
+                        "날짜: %{x|%Y-%m-%d}" +
+                        "<extra></extra>"
                     )
                 )
 
@@ -1914,11 +1945,12 @@ with tab1:
             
             # --- 총 투자 원금 상세 내역 표시 ---
             if config['monthly_contribution'] > 0:
-                num_contributions = len(target_weights.index) - 1 if len(target_weights.index) > 0 else 0
-                breakdown_str = f"(초기: {currency_symbol}{config['initial_capital']:,.0f} + 추가: {currency_symbol}{config['monthly_contribution']:,.0f} x {num_contributions}회)"
+                # metrics에 저장된 total_contribution에서 역산하여 횟수 표시
+                _num_c = round((metrics['total_contribution'] - config['initial_capital']) / config['monthly_contribution']) if config['monthly_contribution'] > 0 else 0
+                breakdown_str = f"(초기: {currency_symbol}{config['initial_capital']:,.0f} + 추가: {currency_symbol}{config['monthly_contribution']:,.0f} × {_num_c}회)"
                 st.markdown(f"<p style='font-size: 0.8em; color: #555; margin-top: -10px;'>{breakdown_str}</p>", unsafe_allow_html=True)
             
-            st.metric("CAGR (연평균 수익률)", f"{metrics['cagr']:.2%}", help="현금흐름(추가입금)을 제외한 순수 전략의 연평균 복리수익률입니다.")
+            st.metric("CAGR (연평균 수익률)", f"{metrics['cagr']:.2%}", help="초기 투자금 기준 포트폴리오의 연평균 복리수익률입니다. (적립식 추가 입금 포함 전략 전체 성과 기준)")
             
             mdd_help = f"기간: {metrics['mdd_start'].strftime('%Y-%m-%d')} ~ {metrics['mdd_end'].strftime('%Y-%m-%d')}"
             st.metric("MDD (최대 낙폭)", f"{metrics['mdd']:.2%}", help=mdd_help)
@@ -1951,8 +1983,8 @@ with tab1:
 
             # --- 총 투자 원금 상세 내역 표시 (벤치마크) ---
             if config['monthly_contribution'] > 0:
-                num_contributions = len(target_weights.index) - 1 if len(target_weights.index) > 0 else 0
-                breakdown_str = f"(초기: {currency_symbol}{config['initial_capital']:,.0f} + 추가: {currency_symbol}{config['monthly_contribution']:,.0f} x {num_contributions}회)"
+                _num_c = round((metrics['bm_total_contribution'] - config['initial_capital']) / config['monthly_contribution']) if config['monthly_contribution'] > 0 else 0
+                breakdown_str = f"(초기: {currency_symbol}{config['initial_capital']:,.0f} + 추가: {currency_symbol}{config['monthly_contribution']:,.0f} × {_num_c}회)"
                 st.markdown(f"<p style='font-size: 0.8em; color: #555; margin-top: -10px;'>{breakdown_str}</p>", unsafe_allow_html=True)
 
             st.metric("CAGR (연평균 수익률)", f"{metrics['bm_cagr']:.2%}")
@@ -1994,8 +2026,8 @@ with tab1:
                 # 투명도(alpha)도 0.6으로 통일
                 ax.axvspan(start_interval, end_interval, facecolor=color, alpha=0.6, zorder=0)
                 
-        line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='Strategy', color='royalblue', linewidth=1.0, zorder=3)
-        line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='Benchmark', color='grey', linewidth=1.0, zorder=2)
+        line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='전략', color='royalblue', linewidth=1.0, zorder=3)
+        line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='벤치마크', color='grey', linewidth=1.0, zorder=2)
         
         first_valid_date = cumulative_returns.first_valid_index()
         last_valid_date = cumulative_returns.last_valid_index()
@@ -2021,12 +2053,13 @@ with tab1:
                 Patch(facecolor=_PASTEL['risk_off'], label='Risk-Off (방어)') # HAA 방어 텍스트 매칭
             ]
             
-        ax.set_title('Cumulative Value Over Time', fontsize=16)
-        ax.set_xlabel('Date', fontsize=12); ax.set_ylabel('Portfolio Value', fontsize=12)
+        ax.set_title('누적 자산 추이', fontsize=16)
+        ax.set_xlabel('날짜', fontsize=12); ax.set_ylabel('포트폴리오 가치', fontsize=12)
         formatter = mtick.FuncFormatter(lambda y, _: format_large_number(y, symbol=currency_symbol))
         ax.yaxis.set_major_formatter(formatter)
         ax.legend(handles=legend_handles, loc='upper left', fontsize=10); ax.grid(True, which="both", ls="--", linewidth=0.5)
         st.pyplot(fig)
+        plt.close(fig)
         
         st.markdown("---")
         st.header("🔬 상세 분석")
@@ -2039,30 +2072,30 @@ with tab1:
             monthly_bm_returns_for_annual = benchmark_returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
         else:
             monthly_pf_returns_for_annual = portfolio_returns; monthly_bm_returns_for_annual = benchmark_returns
-        annual_returns = monthly_pf_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Strategy")
-        bm_annual_returns = monthly_bm_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Benchmark")
+        annual_returns = monthly_pf_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="전략")
+        bm_annual_returns = monthly_bm_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="벤치마크")
         annual_df = pd.concat([annual_returns, bm_annual_returns], axis=1)
         annual_df.index = annual_df.index.year
         annual_df.index = annual_df.index.astype(str)
-        annual_df.index.name = "Date" # 인덱스 이름 재설정        
+        annual_df.index.name = "연도"  # 인덱스 이름 재설정
         with col1_annual: st.dataframe(annual_df.style.format("{:.2%}"))
         with col2_annual:
             fig2, ax2 = plt.subplots(figsize=(10, 5))
-            annual_df.plot(kind='bar', ax=ax2, color=['royalblue', 'grey']); ax2.set_title('Annual Returns', fontsize=16)
-            ax2.set_xlabel('Year', fontsize=12); ax2.set_ylabel('Return', fontsize=12); ax2.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
-            ax2.tick_params(axis='x', rotation=45); ax2.grid(axis='y', linestyle='--', linewidth=0.5); st.pyplot(fig2)
+            annual_df.plot(kind='bar', ax=ax2, color=['royalblue', 'grey']); ax2.set_title('연도별 수익률', fontsize=16)
+            ax2.set_xlabel('연도', fontsize=12); ax2.set_ylabel('수익률', fontsize=12); ax2.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+            ax2.tick_params(axis='x', rotation=45); ax2.grid(axis='y', linestyle='--', linewidth=0.5); st.pyplot(fig2); plt.close(fig2)
 
         st.subheader("📉 하락폭(Drawdown) 추이")
         # 데이터 타입 오류 방지를 위해 astype(float).fillna(0) 추가
         strategy_dd = (strategy_growth / strategy_growth.cummax() - 1).astype(float).fillna(0)
         benchmark_dd = (benchmark_growth / benchmark_growth.cummax() - 1).astype(float).fillna(0)
         fig3, ax3 = plt.subplots(figsize=(10, 5))
-        ax3.plot(strategy_dd.index, strategy_dd, label='Strategy Drawdown', color='royalblue', linewidth=1.0)
-        ax3.plot(benchmark_dd.index, benchmark_dd, label='Benchmark Drawdown', color='grey', linewidth=1.0)
+        ax3.plot(strategy_dd.index, strategy_dd, label='전략 하락폭', color='royalblue', linewidth=1.0)
+        ax3.plot(benchmark_dd.index, benchmark_dd, label='벤치마크 하락폭', color='grey', linewidth=1.0)
         ax3.fill_between(strategy_dd.index, strategy_dd, 0, color='royalblue', alpha=0.1)
-        ax3.set_title('Drawdown Over Time', fontsize=16)
-        ax3.set_xlabel('Date', fontsize=12); ax3.set_ylabel('Drawdown', fontsize=12); ax3.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
-        ax3.legend(loc='lower right', fontsize=10); ax3.grid(True, which="both", ls="--", linewidth=0.5); st.pyplot(fig3)
+        ax3.set_title('하락폭(Drawdown) 추이', fontsize=16)
+        ax3.set_xlabel('날짜', fontsize=12); ax3.set_ylabel('하락폭 (%)', fontsize=12); ax3.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+        ax3.legend(loc='lower right', fontsize=10); ax3.grid(True, which="both", ls="--", linewidth=0.5); st.pyplot(fig3); plt.close(fig3)
         
         st.subheader("🗓️ 월별 수익률 히트맵")
         if not monthly_pf_returns_for_annual.empty:
@@ -2072,10 +2105,13 @@ with tab1:
             heatmap_df['Year'] = heatmap_df.index.year
             heatmap_df['Month'] = heatmap_df.index.month
             
-            heatmap_pivot = heatmap_df.pivot_table(index='Year', columns='Month', values='Return', aggfunc='sum')
-            heatmap_pivot.columns = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+            heatmap_pivot = heatmap_df.pivot_table(index='Year', columns='Month', values='Return', aggfunc='first')
+            # 정수 월 번호를 한국어 월 이름으로 변환
+            month_labels = {1:'1월',2:'2월',3:'3월',4:'4월',5:'5월',6:'6월',
+                           7:'7월',8:'8월',9:'9월',10:'10월',11:'11월',12:'12월'}
+            heatmap_pivot.columns = [month_labels.get(c, str(c)) for c in heatmap_pivot.columns]
             monthly_avg = heatmap_pivot.mean()
-            heatmap_pivot.loc['Average'] = monthly_avg
+            heatmap_pivot.loc['평균'] = monthly_avg
             
             st.dataframe(heatmap_pivot.style.format("{:.2%}", na_rep="").background_gradient(cmap='RdYlGn', axis=None))
 
@@ -2089,9 +2125,9 @@ with tab1:
             
             contribution_data = []
             
-            # 2. 리밸런싱 주기에 맞는 기간별 수익률 계산
+            # 2. 리밸런싱 주기에 맞는 기간별 수익률 계산 (안전한 reindex 사용)
             rebal_dates = target_weights.index
-            periodic_prices = prices.loc[rebal_dates]
+            periodic_prices = prices.reindex(rebal_dates, method='nearest')
             periodic_returns = periodic_prices.pct_change()
 
             # 3. 분석할 전체 자산 목록 준비 (중복 제거)
@@ -2342,11 +2378,15 @@ with tab2:
                     target_weights = result_data.get('target_weights', pd.DataFrame())
                     contribution_dates = target_weights.index
 
-                    monthly_adds = pd.Series(monthly_contribution, index=contribution_dates)
-                    monthly_adds = monthly_adds.reindex(portfolio_value.index).fillna(0)
+                    # 각 기여금 입금 날짜에 해당하는 누적 투자 원금 계산
+                    # (입금 후 수익률 적용 기준 - calculate_cumulative_returns_with_dca와 동일한 로직)
+                    monthly_adds = pd.Series(0.0, index=portfolio_value.index)
+                    for cd in contribution_dates:
+                        if cd in monthly_adds.index:
+                            monthly_adds.loc[cd] += monthly_contribution
                     
+                    # 첫날: 초기 투자금 세팅
                     if not monthly_adds.empty:
-                        # 첫 날 투자 원금은 초기 투자금 + 첫 월 추가 투자금
                         monthly_adds.iloc[0] = initial_capital + monthly_adds.iloc[0]
                     
                     cumulative_contributions = monthly_adds.cumsum()
@@ -2356,11 +2396,12 @@ with tab2:
                     
                     ax1.plot(cumulative_return_pct, label=result_name, linewidth=1.0)
 
-            ax1.set_title('Cumulative Return Comparison', fontsize=16)
-            ax1.set_xlabel('Date'); ax1.set_ylabel('Cumulative Return (%)')
+            ax1.set_title('누적 수익률 비교', fontsize=16)
+            ax1.set_xlabel('날짜'); ax1.set_ylabel('누적 수익률 (%)')
             ax1.yaxis.set_major_formatter(mtick.FuncFormatter(lambda y, _: f'{y:,.0f}%'))
             ax1.legend(loc='upper left'); ax1.grid(True, which="both", ls="--", linewidth=0.5)
             st.pyplot(fig1)
+            plt.close(fig1)
 
             st.divider()
             st.subheader("📉 하락폭(Drawdown) 비교 그래프")
@@ -2381,11 +2422,12 @@ with tab2:
                     ax2.plot(dd_series, label=result_name, linewidth=1.0)
                     ax2.fill_between(dd_series.index, dd_series, 0, alpha=0.1) # 하락폭 영역 음영 처리
 
-            ax2.set_title('Drawdown Comparison', fontsize=16)
-            ax2.set_xlabel('Date'); ax2.set_ylabel('Drawdown')
+            ax2.set_title('하락폭(Drawdown) 비교', fontsize=16)
+            ax2.set_xlabel('날짜'); ax2.set_ylabel('하락폭 (%)')
             ax2.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
-            ax2.legend(loc='lower left'); ax2.grid(True, which="both", ls="--", linewidth=0.5)
+            ax2.legend(loc='lower right'); ax2.grid(True, which="both", ls="--", linewidth=0.5)
             st.pyplot(fig2)
+            plt.close(fig2)
 
 
             
