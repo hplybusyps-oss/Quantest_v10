@@ -103,7 +103,43 @@ if 'config_to_load' in st.session_state:
             if not match.empty:
                 # 찾은 이름을 session_state에 저장합니다.
                 st.session_state.sidebar_benchmark_display = match.iloc[0]['display']
-       
+
+    # --- [추가] 모든 세부 설정을 세션에 임시 저장하여 화면에 업데이트할 준비를 합니다 ---
+    st.session_state.loaded_start_date = pd.to_datetime(loaded_config.get('start_date', '2007-01-01')).date()
+    st.session_state.loaded_end_date = pd.to_datetime(loaded_config.get('end_date', date.today())).date()
+    st.session_state.loaded_initial_cap = loaded_config.get('initial_capital', 10000)
+    st.session_state.loaded_monthly_cont = loaded_config.get('monthly_contribution', 0)
+    
+    # 전략 이름 변경(HAA, A-Core) 완벽 대응
+    loaded_strat = loaded_config.get('strategy_mode', 'HAA')
+    if 'A-Core' in loaded_strat: loaded_strat = 'A-Core'
+    else: loaded_strat = 'HAA'
+    st.session_state.loaded_strat_mode = loaded_strat
+
+    st.session_state.loaded_bt_type = loaded_config.get('backtest_type', '월별')
+    st.session_state.loaded_reb_freq = loaded_config.get('rebalance_freq', '월별')
+    st.session_state.loaded_reb_day = loaded_config.get('rebalance_day', '월초' if loaded_config.get('rebalance_day') == '월초' else '월말')
+    st.session_state.loaded_tx_cost = float(loaded_config.get('transaction_cost', 0.001)) * 100
+    st.session_state.loaded_rf_rate = float(loaded_config.get('risk_free_rate', 0.015)) * 100
+
+    mom_params = loaded_config.get('momentum_params', {})
+    st.session_state.loaded_mom_type = mom_params.get('type', '13612U')
+    st.session_state.loaded_mom_periods = ", ".join(map(str, mom_params.get('periods', [1, 3, 6, 12])))
+
+    pf_params = loaded_config.get('portfolio_params', {})
+    st.session_state.loaded_use_canary = pf_params.get('use_canary', True)
+    st.session_state.loaded_use_hybrid = pf_params.get('use_hybrid_protection', True)
+    st.session_state.loaded_top_n_agg = pf_params.get('top_n_aggressive', 4)
+    st.session_state.loaded_top_n_def = pf_params.get('top_n_defensive', 1)
+    st.session_state.loaded_weighting = pf_params.get('weighting', '동일 비중 (Equal Weight)')
+
+    acore_cfg = loaded_config.get('acore_config') or {}
+    st.session_state.loaded_sp500 = acore_cfg.get('sp500_ticker', '^GSPC')
+    st.session_state.loaded_ma_period = int(acore_cfg.get('ma_period', 200))
+    st.session_state.loaded_vol_window = int(acore_cfg.get('vol_window', 60))
+    st.session_state.loaded_cat_cap = int(acore_cfg.get('category_cap', 2))
+    st.session_state.loaded_zscore_thresh = float(acore_cfg.get('zscore_threshold', 1.5))
+
     # 한 번 사용한 임시 변수는 즉시 삭제
     del st.session_state.config_to_load
 
@@ -112,24 +148,28 @@ etf_df = load_Stock_list()
 st.sidebar.title("⚙️ 백테스트 설정")
 st.sidebar.header("1. 기본 설정")
 
+default_start_date = st.session_state.get('loaded_start_date', pd.to_datetime('2007-01-01').date())
 start_date = st.sidebar.date_input(
     "시작일",
-    pd.to_datetime('2007-01-01').date(),
+    default_start_date,
     min_value=date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
     max_value=date.today()
 )
+
+default_end_date = st.session_state.get('loaded_end_date', date.today())
 end_date = st.sidebar.date_input(
     "종료일",
-    date.today(),
+    default_end_date,
     min_value=date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
     max_value=date.today()
 )
 
 # --- 통화 선택 UI를 제거하고, 나중에 티커 기반으로 자동 결정 ---
 
+default_initial_cap = st.session_state.get('loaded_initial_cap', 10000)
 initial_capital = st.sidebar.number_input(
     "초기 투자금액",
-    value=10000,
+    value=int(default_initial_cap),
     min_value=0,
     step=1000, # 천 단위로 조절하기 쉽게 step 추가
     help="백테스트를 시작하는 초기 총 자산입니다. 통화는 선택된 자산군에 따라 자동 결정됩니다."
@@ -139,9 +179,10 @@ st.sidebar.markdown(f"<p style='text-align: right; color: #555; margin-top: -10p
 
 
 # 월별 추가 투자금액 입력
+default_monthly_cont = st.session_state.get('loaded_monthly_cont', 0)
 monthly_contribution = st.sidebar.number_input(
     "월별 추가 투자금액",
-    value=0, # 기본값을 1000으로 변경
+    value=int(default_monthly_cont), # 기본값을 1000으로 변경
     min_value=0,
     step=100, # 백 단위로 조절하기 쉽게 step 추가
     help="매월 리밸런싱 시점에 추가로 투자할 금액입니다."
@@ -187,10 +228,13 @@ else:
 )
 
 st.sidebar.header("2. 전략 선택")
+strat_options = ('HAA', 'A-Core')
+default_strat = st.session_state.get('loaded_strat_mode', 'HAA')
+strat_idx = strat_options.index(default_strat) if default_strat in strat_options else 0
 strategy_mode = st.sidebar.radio(
     "운용 전략",
-    ('HAA', 'A-Core'),
-    index=0,
+    strat_options,
+    index=strat_idx,
     help="""
     - **HAA**: 카나리아 자산의 양/음수 모멘텀으로 Risk-On/Off를 결정하는 기존 전략입니다.
     - **A-Core**: 시장 국면(강세/중립/약세)을 3단계로 세분화하고, 샤프비율 기반 랭킹 + 카테고리 캡으로 자산을 선정하는 고도화 전략입니다.
@@ -198,20 +242,27 @@ strategy_mode = st.sidebar.radio(
 )
 
 st.sidebar.header("3. 실행 엔진 설정")
+bt_options = ('일별', '월별')
+default_bt = st.session_state.get('loaded_bt_type', '월별')
+bt_idx = bt_options.index(default_bt) if default_bt in bt_options else 1
 backtest_type = st.sidebar.radio(
     "백테스트 데이터 기준",
-    ('일별', '월별'),
-    index=1,
+    bt_options,
+    index=bt_idx,
     help="""
     백테스트의 시간 단위를 결정합니다.
     - **일별**: 일별 데이터 사용
     - **월별**: 월별 데이터 사용
     """
 )
+
+reb_options = ('월별', '분기별')
+default_reb = st.session_state.get('loaded_reb_freq', '월별')
+reb_idx = reb_options.index(default_reb) if default_reb in reb_options else 0
 rebalance_freq = st.sidebar.radio(
     "리밸런싱 주기",
-    ('월별', '분기별'),
-    index=0,
+    reb_options,
+    index=reb_idx,
     help="포트폴리오의 자산 비중을 **재조정(리밸런싱)하는 주기**를 선택합니다."
 )
 
@@ -229,14 +280,20 @@ rebalance_day_help = """
 - **사용 데이터:** 2월 1일까지의 모든 데이터
 - **결과:** "2월 1일의 성적"까지 포함하여 2월 계획을 짭니다.
 """
-rebalance_day = st.sidebar.radio("리밸런싱 기준일", ('월말', '월초'), index=0, help=rebalance_day_help)
+day_options = ('월말', '월초')
+default_day = st.session_state.get('loaded_reb_day', '월말')
+day_idx = day_options.index(default_day) if default_day in day_options else 0
+rebalance_day = st.sidebar.radio("리밸런싱 기준일", day_options, index=day_idx, help=rebalance_day_help)
 
+default_tx = st.session_state.get('loaded_tx_cost', 0.1)
 transaction_cost = st.sidebar.slider(
-    "거래 비용 (%)", 0.0, 1.0, 0.1, 0.01,
+    "거래 비용 (%)", 0.0, 1.0, float(default_tx), 0.01,
     help="매수 또는 매도 시 발생하는 **거래 비용(수수료, 슬리피지 등)을 시뮬레이션**합니다. 입력된 값은 편도(one-way) 기준입니다."
 )
+
+default_rf = st.session_state.get('loaded_rf_rate', 1.5)
 risk_free_rate = st.sidebar.slider(
-    "무위험 수익률 (%)", 0.0, 5.0, 1.5, 0.1,
+    "무위험 수익률 (%)", 0.0, 5.0, float(default_rf), 0.1,
     help="**샤프 지수(Sharpe Ratio) 계산**에 사용되는 무위험 수익률입니다. 일반적으로 미국 단기 국채 금리를 사용하며, 연 수익률 기준으로 입력합니다."
 )
 
@@ -413,22 +470,39 @@ momentum_type_help = """
 - **평균 모멘텀**: 사용자가 **직접 입력한 기간들**의 수익률을 평균냅니다.
 - **상대 모멘텀**: 여러 자산 중 특정 기간 동안 가장 많이 상승한 자산을 선택합니다. (상승장 추종에 유리)
 """
-momentum_type = st.sidebar.selectbox("모멘텀 종류", ('13612U', '평균 모멘텀', '상대 모멘텀'), help=momentum_type_help)
+mom_options = ('13612U', '평균 모멘텀', '상대 모멘텀')
+default_mom_type = st.session_state.get('loaded_mom_type', '13612U')
+mom_idx = mom_options.index(default_mom_type) if default_mom_type in mom_options else 0
+momentum_type = st.sidebar.selectbox("모멘텀 종류", mom_options, index=mom_idx, help=momentum_type_help)
+
+default_mom_periods = st.session_state.get('loaded_mom_periods', '1, 3, 6, 12')
 momentum_periods_str = st.sidebar.text_input(
     "모멘텀 기간 (개월, 쉼표로 구분)", 
-    value='1, 3, 6, 12', 
+    value=default_mom_periods, 
     help="""
     - **13612U**: 이 입력값은 **무시**됩니다.
     - **평균 모멘텀**: 사용할 기간을 쉼표로 구분하여 입력합니다. (예: 3, 6, 9)
     - **상대 모멘텀**: 입력된 숫자 중 **첫 번째 값**만 사용합니다. (예: '6' 입력 시 6개월 상대 모멘텀)
     """
 )
+
 st.sidebar.header("6. 포트폴리오 구성 전략")
-use_canary = st.sidebar.toggle("카나리아 자산 사용 (Risk-On/Off)", value=True, help="체크 시, 카나리아 자산의 모멘텀이 양수일 때만 공격 자산에 투자합니다. 해제 시 항상 공격 자산군 내에서만 투자합니다.")
-use_hybrid_protection = st.sidebar.toggle("하이브리드 보호 장치 사용", value=True, help="체크 시, 공격 자산으로 선택되었어도 개별 모멘텀이 음수이면 안전 자산으로 교체합니다.")
-top_n_aggressive = st.sidebar.number_input("공격 자산 Top N", min_value=1, max_value=10, value=4, help="공격 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
-top_n_defensive = st.sidebar.number_input("방어 자산 Top N", min_value=1, max_value=10, value=1, help="방어 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
-weighting_scheme = st.sidebar.selectbox("자산 배분 방식", ('동일 비중 (Equal Weight)',), help="선택된 자산들에 어떤 비중으로 투자할지 결정합니다. (추후 확장 가능)")
+default_use_canary = st.session_state.get('loaded_use_canary', True)
+use_canary = st.sidebar.toggle("카나리아 자산 사용 (Risk-On/Off)", value=default_use_canary, help="체크 시, 카나리아 자산의 모멘텀이 양수일 때만 공격 자산에 투자합니다. 해제 시 항상 공격 자산군 내에서만 투자합니다.")
+
+default_use_hybrid = st.session_state.get('loaded_use_hybrid', True)
+use_hybrid_protection = st.sidebar.toggle("하이브리드 보호 장치 사용", value=default_use_hybrid, help="체크 시, 공격 자산으로 선택되었어도 개별 모멘텀이 음수이면 안전 자산으로 교체합니다.")
+
+default_top_n_agg = st.session_state.get('loaded_top_n_agg', 4)
+top_n_aggressive = st.sidebar.number_input("공격 자산 Top N", min_value=1, max_value=10, value=int(default_top_n_agg), help="공격 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
+
+default_top_n_def = st.session_state.get('loaded_top_n_def', 1)
+top_n_defensive = st.sidebar.number_input("방어 자산 Top N", min_value=1, max_value=10, value=int(default_top_n_def), help="방어 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
+
+weight_options = ('동일 비중 (Equal Weight)',)
+default_weighting = st.session_state.get('loaded_weighting', '동일 비중 (Equal Weight)')
+weight_idx = weight_options.index(default_weighting) if default_weighting in weight_options else 0
+weighting_scheme = st.sidebar.selectbox("자산 배분 방식", weight_options, index=weight_idx, help="선택된 자산들에 어떤 비중으로 투자할지 결정합니다. (추후 확장 가능)")
 
 # =============================================================================
 #    [A-Core 신규] A-Core 전략 전용 사이드바 설정
@@ -444,31 +518,39 @@ if strategy_mode == 'A-Core':
     """, unsafe_allow_html=True)
     
     with st.sidebar.expander("🌡️ 시장 국면 판단 설정", expanded=True):
+        default_sp500 = st.session_state.get('loaded_sp500', '^GSPC')
         sp500_ticker_acore = st.text_input(
             "S&P500 지수 티커",
-            value="^GSPC",
+            value=default_sp500,
             help="강세/중립 국면 판단에 사용하는 S&P500 지수 티커입니다. `^GSPC`는 Yahoo Finance 기준 S&P500 지수의 정식 티커이며 오류가 아닙니다. 한국 ETF(예: 069500.KS)로 대체 가능합니다."
         )
+        
+        default_ma = st.session_state.get('loaded_ma_period', 200)
         ma_period_acore = st.number_input(
             "이동평균선 기간 (일)",
-            min_value=20, max_value=400, value=200, step=10,
+            min_value=20, max_value=400, value=int(default_ma), step=10,
             help="S&P500 지수의 이동평균선 기간입니다. 기본값 200일.\n\n[국면 판단 기준]\n- 강세: TIP 모멘텀>0 & S&P500 > MA\n- 중립: TIP 모멘텀>0 & S&P500 < MA\n- 약세: TIP 모멘텀 ≤ 0"
         )
     
     with st.sidebar.expander("📊 랭킹 & 위험관리 설정", expanded=True):
+        default_vol = st.session_state.get('loaded_vol_window', 60)
         vol_window_acore = st.number_input(
             "변동성 계산 기간 (일)",
-            min_value=20, max_value=120, value=60, step=5,
+            min_value=20, max_value=120, value=int(default_vol), step=5,
             help="샤프비율 랭킹의 분모에 사용되는 변동성 계산 기간 (영업일 기준). 기본값 60일(약 3개월)."
         )
+        
+        default_cap = st.session_state.get('loaded_cat_cap', 2)
         category_cap_acore = st.number_input(
             "카테고리 캡 (카테고리별 최대 편입 수)",
-            min_value=1, max_value=5, value=2, step=1,
+            min_value=1, max_value=5, value=int(default_cap), step=1,
             help="동일 카테고리(주식/대체/안전)에서 Top N 순위에 들어올 수 있는 최대 자산 수입니다."
         )
+        
+        default_zscore = st.session_state.get('loaded_zscore_thresh', 1.5)
         zscore_threshold_acore = st.slider(
             "변동성 Z-Score 임계값",
-            min_value=0.5, max_value=3.0, value=1.5, step=0.1,
+            min_value=0.5, max_value=3.0, value=float(default_zscore), step=0.1,
             help="최근 1개월 변동성이 [12개월 평균 + (표준편차 × 임계값)]을 초과하면 과변동성으로 판단합니다."
         )
     
