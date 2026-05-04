@@ -50,7 +50,7 @@ plt.rc('axes', unicode_minus=False)
 # -----------------------------------------------------------------------------
 # 1. GUI 화면 구성 (Streamlit)
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크 v1.3", page_icon="📈", layout="wide")
+st.set_page_config(page_title="[Quantest] 퀀트 백테스트 v1.0.0", page_icon="📈", layout="wide")
 
 # --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
 if 'toast_message' in st.session_state:
