@@ -190,11 +190,11 @@ else:
 st.sidebar.header("2. 전략 선택")
 strategy_mode = st.sidebar.radio(
     "운용 전략",
-    ('HAA (기존)', 'A-Core (신규)'),
+    ('HAA', 'A-Core'),
     index=0,
     help="""
-    - **HAA (기존)**: 카나리아 자산의 양/음수 모멘텀으로 Risk-On/Off를 결정하는 기존 전략입니다.
-    - **A-Core (신규)**: 시장 국면(강세/중립/약세)을 3단계로 세분화하고, 샤프비율 기반 랭킹 + 카테고리 캡으로 자산을 선정하는 고도화 전략입니다.
+    - **HAA**: 카나리아 자산의 양/음수 모멘텀으로 Risk-On/Off를 결정하는 기존 전략입니다.
+    - **A-Core**: 시장 국면(강세/중립/약세)을 3단계로 세분화하고, 샤프비율 기반 랭킹 + 카테고리 캡으로 자산을 선정하는 고도화 전략입니다.
     """
 )
 
@@ -434,7 +434,7 @@ weighting_scheme = st.sidebar.selectbox("자산 배분 방식", ('동일 비중 
 # =============================================================================
 #    [A-Core 신규] A-Core 전략 전용 사이드바 설정
 # =============================================================================
-if strategy_mode == 'A-Core (신규)':
+if strategy_mode == 'A-Core':
     st.sidebar.header("7. A-Core 전략 설정")
     
     st.sidebar.markdown("""
@@ -1176,7 +1176,7 @@ if run_button_clicked:
     all_tickers = sorted(list(set(aggressive_tickers + defensive_tickers + canary_tickers + [benchmark_ticker])))
     
     # A-Core 전략 시 S&P500 지수도 데이터 다운로드 대상에 추가
-    if config.get('strategy_mode') == 'A-Core (신규)' and config.get('acore_config'):
+    if config.get('strategy_mode') == 'A-Core' and config.get('acore_config'):
         sp500_tk = config['acore_config'].get('sp500_ticker', '^GSPC')
         if sp500_tk not in all_tickers:
             all_tickers.append(sp500_tk)
@@ -1220,7 +1220,7 @@ if run_button_clicked:
         phase_scores_log = None
         market_phase_series = None
 
-        if config.get('strategy_mode') == 'A-Core (신규)' and config.get('acore_config'):
+        if config.get('strategy_mode') == 'A-Core' and config.get('acore_config'):
             with st.spinner('🌡️ A-Core: 시장 국면 판단 중...'):
                 market_phase_series = determine_market_phase(prices, canary_tickers, config)
             with st.spinner('📊 A-Core: 샤프비율 랭킹 & 카테고리 캡 적용 중...'):
@@ -1571,7 +1571,7 @@ with tab1:
             top_agg = portfolio_params.get('top_n_aggressive', 'N/A')
             top_def = portfolio_params.get('top_n_defensive', 'N/A')
             weighting = portfolio_params.get('weighting', 'N/A')
-            st.markdown(f"**운용 전략**: `{config.get('strategy_mode', 'HAA (기존)')}`")
+            st.markdown(f"**운용 전략**: `{config.get('strategy_mode', 'HAA')}`")
             st.markdown(f"**카나리아 자산 사용 (Risk-On/Off)**: `{'사용' if use_canary else '미사용'}`")
             st.markdown(f"**하이브리드 보호 장치 사용**: `{'사용' if use_hybrid else '미사용'}`")
             st.markdown(f"**공격 자산 Top N**: `{top_agg}`")
@@ -1579,7 +1579,7 @@ with tab1:
             st.markdown(f"**자산 배분 방식**: `{weighting}`")
             
             # A-Core 전용 설정 표시
-            if config.get('strategy_mode') == 'A-Core (신규)' and config.get('acore_config'):
+            if config.get('strategy_mode') == 'A-Core' and config.get('acore_config'):
                 ac = config['acore_config']
                 st.divider()
                 st.markdown("**A-Core 전략 설정**")
@@ -1604,7 +1604,7 @@ with tab1:
         st.header("2. 시그널 모멘텀")
         
         # ── [A-Core 신규] 시장 국면 통계 카드 (차트와 분리하여 먼저 표시) ───
-        if config.get('strategy_mode') == 'A-Core (신규)':
+        if config.get('strategy_mode') == 'A-Core':
             market_phase_series = results.get('market_phase_series')
             phase_scores_log    = results.get('phase_scores_log')
 
@@ -1621,7 +1621,7 @@ with tab1:
                     st.metric("🟡 중립 국면", f"{cnt}회", f"{cnt/total:.1%}")
                 with col_bear:
                     cnt = phase_counts.get('약세', 0)
-                    st.metric("🔴 약세 국면 (카나리아)", f"{cnt}회", f"{cnt/total:.1%}")
+                    st.metric("🔴 약세 국면", f"{cnt}회", f"{cnt/total:.1%}")
 
                 # 샤프비율 점수 로그 상세 보기
                 if phase_scores_log:
@@ -1698,7 +1698,7 @@ with tab1:
                 ax_price = ax_mom.twinx()
 
                 # ── 배경 국면/모멘텀 음영 ────────────────────────────────────
-                is_acore = config_for_chart.get('strategy_mode') == 'A-Core (신규)'
+                is_acore = config_for_chart.get('strategy_mode') == 'A-Core'
                 _market_phase_s = results.get('market_phase_series')
 
                 if is_acore and _market_phase_s is not None and not _market_phase_s.empty:
@@ -2007,7 +2007,7 @@ with tab1:
             ax.set_xlim(left=graph_start_date, right=graph_end_date)      
         
         # --- [수정] 범례 텍스트도 모멘텀 그래프와 완전히 동일하게 변경 ---
-        if config.get('strategy_mode') == 'A-Core (신규)':
+        if config.get('strategy_mode') == 'A-Core':
             legend_handles = [
                 line1, line2,
                 Patch(facecolor=_PASTEL['강세'], label='강세 국면'),
