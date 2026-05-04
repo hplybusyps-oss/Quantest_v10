@@ -1583,15 +1583,65 @@ with tab1:
 
         # [추가] 사용한 시그널 설정 정보 표시
         with st.expander("사용한 시그널 설정"):
-            # .pkl 파일의 config에서 시그널 관련 정보 추출
-            momentum_params = config.get('momentum_params', {})
-            
-            # 1. 모멘텀 종류 표시
-            st.markdown(f"**모멘텀 종류**: `{momentum_params.get('type', 'N/A')}`")
-            
-            # 2. 모멘텀 기간 표시
-            periods = momentum_params.get('periods', [])
-            st.markdown(f"**모멘텀 기간**: `{', '.join(map(str, periods))}` (개월)")
+            if config.get('strategy_mode') == 'A-Core':
+                # ── A-Core 전략: 국면별 실제 시그널 공식 표시 ──────────────────
+                st.markdown("**모멘텀 계산 기준 기간**: `1, 3, 6, 12개월` (고정)")
+                st.markdown("**카나리아 판단**: `1·3·6·12개월 수익률 평균`으로 리스크 국면 결정")
+                st.divider()
+
+                st.markdown("##### 🟢 강세 국면 — 가중 모멘텀")
+                st.markdown("""
+| 기간 | 가중치 | 계산식 |
+|:---:|:---:|:---|
+| 1개월 | 40% | r₁ × 0.4 |
+| 3개월 | 30% | r₃ × 0.3 |
+| 6개월 | 20% | r₆ × 0.2 |
+| 12개월 | 10% | r₁₂ × 0.1 |
+| **합계** | **100%** | **score = r₁×0.4 + r₃×0.3 + r₆×0.2 + r₁₂×0.1** |
+""")
+                st.caption("→ 단기 모멘텀에 더 높은 비중을 부여해 상승 추세에 빠르게 반응합니다.")
+
+                st.divider()
+                st.markdown("##### 🟡 중립 국면 / 🔴 약세 국면 — 평균 모멘텀")
+                st.markdown("""
+| 기간 | 가중치 | 계산식 |
+|:---:|:---:|:---|
+| 1개월 | 25% | r₁ × 0.25 |
+| 3개월 | 25% | r₃ × 0.25 |
+| 6개월 | 25% | r₆ × 0.25 |
+| 12개월 | 25% | r₁₂ × 0.25 |
+| **합계** | **100%** | **score = (r₁ + r₃ + r₆ + r₁₂) / 4** |
+""")
+                st.caption("→ 전 기간 동일 비중으로 노이즈를 줄이고 안정적인 신호를 생성합니다.")
+
+                st.divider()
+                st.markdown("##### 📐 샤프비율 랭킹 (강세·중립 국면)")
+                ac = config.get('acore_config', {})
+                vol_window = ac.get('vol_window', 60)
+                zscore_thr = ac.get('zscore_threshold', 1.5)
+                st.markdown(f"""
+- **샤프비율 점수** = 모멘텀 점수 ÷ 연율화 변동성
+- **변동성 계산 기간**: `{vol_window}일` (연율화: ×√252)
+- **절대 모멘텀 필터**: 점수 ≤ 0인 자산 제외
+- **과변동성 Z-Score 필터**: 최근 1개월 변동성 > 12개월 평균 + (표준편차 × `{zscore_thr}`) 이면 제외
+""")
+
+            else:
+                # ── HAA 전략: 기존 사이드바 설정 그대로 표시 ──────────────────
+                momentum_params = config.get('momentum_params', {})
+                mom_type = momentum_params.get('type', 'N/A')
+                periods = momentum_params.get('periods', [])
+
+                st.markdown(f"**모멘텀 종류**: `{mom_type}`")
+                st.markdown(f"**모멘텀 기간**: `{', '.join(map(str, periods))}` (개월)")
+
+                if mom_type == '13612U':
+                    st.caption("→ 1·3·6·12개월 수익률의 단순 평균으로 모멘텀 점수를 계산합니다. (기간 입력값 무시)")
+                elif mom_type == '평균 모멘텀':
+                    st.caption(f"→ 입력된 {', '.join(map(str, periods))}개월 수익률을 동일 비중으로 평균합니다.")
+                elif mom_type == '상대 모멘텀':
+                    period_used = periods[0] if periods else 'N/A'
+                    st.caption(f"→ {period_used}개월 수익률 기준으로 자산 간 상대 순위를 비교합니다.")
 
           # [추가] 사용한 포트폴리오 구성 전략 정보 표시
         with st.expander("사용한 포트폴리오 구성 전략"):
