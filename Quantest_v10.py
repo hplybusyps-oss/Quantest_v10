@@ -50,7 +50,7 @@ plt.rc('axes', unicode_minus=False)
 # -----------------------------------------------------------------------------
 # 1. GUI 화면 구성 (Streamlit)
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="[Quantest] 퀀트 백테스트 v1.0.0", page_icon="📈", layout="wide")
+st.set_page_config(page_title="[Quantest] 퀀트 백테스트", page_icon="📈", layout="wide")
 
 # --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
 if 'toast_message' in st.session_state:
@@ -1307,7 +1307,7 @@ def get_saved_results(directory="backtest_results"):
 st.markdown("<a id='top'></a>", unsafe_allow_html=True)
 
 
-st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.3")
+st.title("📈 [Quantest] 퀀트 백테스트_v1.0.0")
 
 run_button_clicked = st.button("백테스트 실행", type="primary")
 if st.session_state.get('settings_changed', False) and not run_button_clicked:
