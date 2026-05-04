@@ -530,21 +530,23 @@ if strategy_mode == 'A-Core (신규)':
                 return [_tk_labels[t] for t in _agg_tickers_for_cat
                         if _DEFAULT_CAT_HINTS.get(t.upper(), '기타') == cat and t in _tk_labels]
 
+            # --- [추가] 세션 상태를 기반으로 전체 카테고리에 이미 할당된 자산을 미리 파악 (완벽한 상호 배제) ---
+            all_assigned_tickers = set()
+            for c in CATEGORY_OPTIONS:
+                all_assigned_tickers.update(st.session_state.acore_cat_buckets.get(c, []))
+
             acore_category_map = {}
             _assigned = set()
 
             for cat in CATEGORY_OPTIONS:
-                color = _CAT_COLORS.get(cat, '#888')
-                st.markdown(
-                    f'<span style="background:{color};color:white;padding:2px 8px;'
-                    f'border-radius:10px;font-size:0.8em;font-weight:bold;">{cat}</span>',
-                    unsafe_allow_html=True
-                )
-                # 이미 다른 카테고리에 배치된 자산은 이 카테고리의 선택지에서 제외
-                _available = [lb for lb in _all_labels if _label_to_tk[lb] not in _assigned]
+                # --- [수정] 색상이 들어간 span 태그를 지우고 일반 텍스트(굵게)로 통일 ---
+                st.markdown(f"**{cat}**")
+                
+                # --- [수정] 현재 카테고리를 제외한 '다른 카테고리'에 선택된 자산만 목록에서 숨김 ---
+                other_cats_assigned = all_assigned_tickers - set(st.session_state.acore_cat_buckets.get(cat, []))
+                _available = [lb for lb in _all_labels if _label_to_tk[lb] not in other_cats_assigned]
 
                 _prev_default = _build_default(cat)
-                # 이전 기본값 중 현재 available한 것만 남기기
                 _valid_default = [lb for lb in _prev_default if lb in _available]
 
                 chosen_labels = st.multiselect(
@@ -555,8 +557,11 @@ if strategy_mode == 'A-Core (신규)':
                     label_visibility='collapsed'
                 )
                 chosen_tickers = [_label_to_tk[lb] for lb in chosen_labels]
+                
+                # 현재 선택된 자산 업데이트
                 st.session_state.acore_cat_buckets[cat] = chosen_tickers
                 _assigned.update(chosen_tickers)
+                
                 for tk in chosen_tickers:
                     acore_category_map[tk] = cat
 
@@ -2006,6 +2011,16 @@ with tab1:
         
         st.subheader("📊 누적 수익 그래프")
         fig, ax = plt.subplots(figsize=(10, 5))
+        
+        # --- [추가] 모멘텀 그래프와 완벽하게 동일한 파스텔 톤 팔레트 ---
+        _PASTEL = {
+            '강세': '#c8f0c8',   # 연초록
+            '중립': '#fff9c4',   # 연노랑
+            '약세': '#ffd6d6',   # 연분홍
+            'risk_on':  '#d4edda',  # HAA Aggressive
+            'risk_off': '#fff3cd',  # HAA Defensive
+        }
+        
         if not investment_mode.empty:
             mode_changes = investment_mode.loc[investment_mode.shift(1) != investment_mode].index.tolist()
             if investment_mode.index[0] not in mode_changes: mode_changes.insert(0, investment_mode.index[0])
@@ -2013,42 +2028,44 @@ with tab1:
                 start_interval = mode_changes[i]
                 end_interval = mode_changes[i+1] if i+1 < len(mode_changes) else cumulative_returns.index[-1]
                 mode = investment_mode.loc[start_interval]
-                # A-Core: 3단계 색상 / HAA: 기존 2단계 색상
-                if '강세' in mode:
-                    color = 'lightgreen'
-                elif '중립' in mode:
-                    color = 'lightyellow'
-                elif '약세' in mode:
-                    color = 'mistyrose'
-                elif mode == 'Aggressive':
-                    color = 'lightgreen'
-                else:
-                    color = 'lightyellow'
-                ax.axvspan(start_interval, end_interval, facecolor=color, alpha=0.3)
-        line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='Strategy', color='royalblue', linewidth=1.0)
-        line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='Benchmark', color='grey', linewidth=1.0)
+                
+                # 색상 매칭
+                if '강세' in mode: color = _PASTEL['강세']
+                elif '중립' in mode: color = _PASTEL['중립']
+                elif '약세' in mode: color = _PASTEL['약세']
+                elif mode == 'Aggressive': color = _PASTEL['risk_on']
+                else: color = _PASTEL['risk_off']
+                
+                # 투명도(alpha)도 0.6으로 통일
+                ax.axvspan(start_interval, end_interval, facecolor=color, alpha=0.6, zorder=0)
+                
+        line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='Strategy', color='royalblue', linewidth=1.0, zorder=3)
+        line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='Benchmark', color='grey', linewidth=1.0, zorder=2)
         
-        # 1. 데이터가 실제로 시작하고 끝나는 날짜를 찾습니다.
         first_valid_date = cumulative_returns.first_valid_index()
         last_valid_date = cumulative_returns.last_valid_index()
 
-        # 2. 유효한 날짜가 있을 경우, X축의 시작과 끝에 동적인 여백을 줍니다.
         if first_valid_date is not None and last_valid_date is not None:
             margin_days = (last_valid_date - first_valid_date).days * 0.05
             graph_start_date = first_valid_date - pd.DateOffset(days=margin_days)
             graph_end_date = last_valid_date + pd.DateOffset(days=margin_days)
             ax.set_xlim(left=graph_start_date, right=graph_end_date)      
         
-        # A-Core vs HAA 범례 구분
+        # --- [수정] 범례 텍스트도 모멘텀 그래프와 완전히 동일하게 변경 ---
         if config.get('strategy_mode') == 'A-Core (신규)':
             legend_handles = [
                 line1, line2,
-                Patch(facecolor='lightgreen', label='강세 (Bull)'),
-                Patch(facecolor='lightyellow', label='중립 (Neutral)'),
-                Patch(facecolor='mistyrose', label='약세 (Bear/Defensive)'),
+                Patch(facecolor=_PASTEL['강세'], label='강세 국면'),
+                Patch(facecolor=_PASTEL['중립'], label='중립 국면'),
+                Patch(facecolor=_PASTEL['약세'], label='약세 국면'),
             ]
         else:
-            legend_handles = [line1, line2, Patch(facecolor='lightgreen', label='Aggressive'), Patch(facecolor='lightyellow', label='Defensive')]
+            legend_handles = [
+                line1, line2, 
+                Patch(facecolor=_PASTEL['risk_on'], label='Risk-On (카나리아 양수)'), 
+                Patch(facecolor=_PASTEL['risk_off'], label='Risk-Off (방어)') # HAA 방어 텍스트 매칭
+            ]
+            
         ax.set_title('Cumulative Value Over Time', fontsize=16)
         ax.set_xlabel('Date', fontsize=12); ax.set_ylabel('Portfolio Value', fontsize=12)
         formatter = mtick.FuncFormatter(lambda y, _: format_large_number(y, symbol=currency_symbol))
@@ -2095,10 +2112,16 @@ with tab1:
         st.subheader("🗓️ 월별 수익률 히트맵")
         if not monthly_pf_returns_for_annual.empty:
             heatmap_df = monthly_pf_returns_for_annual.to_frame(name='Return').copy()
-            heatmap_df['Year'] = heatmap_df.index.year; heatmap_df['Month'] = heatmap_df.index.month
+            # 데이터 형식을 숫자로 강제 변환하여 HAA에서도 그라데이션 색상이 정상 적용되도록 수정
+            heatmap_df['Return'] = pd.to_numeric(heatmap_df['Return'], errors='coerce').fillna(0)
+            heatmap_df['Year'] = heatmap_df.index.year
+            heatmap_df['Month'] = heatmap_df.index.month
+            
             heatmap_pivot = heatmap_df.pivot_table(index='Year', columns='Month', values='Return', aggfunc='sum')
             heatmap_pivot.columns = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-            monthly_avg = heatmap_pivot.mean(); heatmap_pivot.loc['Average'] = monthly_avg
+            monthly_avg = heatmap_pivot.mean()
+            heatmap_pivot.loc['Average'] = monthly_avg
+            
             st.dataframe(heatmap_pivot.style.format("{:.2%}", na_rep="").background_gradient(cmap='RdYlGn', axis=None))
 
         # --- [수정] '전략 기여도 분석' 테이블 ---
