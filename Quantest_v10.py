@@ -298,10 +298,10 @@ with st.sidebar.expander("티커 관리"):
                         
                         st.success(f"'{new_name}' ({new_ticker}) 추가 완료!")
                         load_Stock_list.clear()
-                        # --- [추가] 새로고침 직전, 현재 선택값을 임시 저장 ---
-                        st.session_state.temp_selection_agg = st.session_state.selected_aggressive
-                        st.session_state.temp_selection_def = st.session_state.selected_defensive
-                        st.session_state.temp_selection_can = st.session_state.selected_canary                                           
+                        # --- [수정] 값이 없을 경우 에러 없이 빈 리스트를 반환하도록 안전하게 수정 ---
+                        st.session_state.temp_selection_agg = st.session_state.get('selected_aggressive', [])
+                        st.session_state.temp_selection_def = st.session_state.get('selected_defensive', [])
+                        st.session_state.temp_selection_can = st.session_state.get('selected_canary', [])                                           
                         st.rerun()
                     except Exception as e:
                         st.error(f"파일 쓰기 중 오류 발생: {e}")
@@ -335,10 +335,10 @@ with st.sidebar.expander("티커 관리"):
                     
                     st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")                  
                     load_Stock_list.clear()
-                    # --- [추가] 새로고침 직전, 현재 선택값을 임시 저장 ---
-                    st.session_state.temp_selection_agg = st.session_state.selected_aggressive
-                    st.session_state.temp_selection_def = st.session_state.selected_defensive
-                    st.session_state.temp_selection_can = st.session_state.selected_canary
+                    # --- [수정] 값이 없을 경우 에러 없이 빈 리스트를 반환하도록 안전하게 수정 ---
+                    st.session_state.temp_selection_agg = st.session_state.get('selected_aggressive', [])
+                    st.session_state.temp_selection_def = st.session_state.get('selected_defensive', [])
+                    st.session_state.temp_selection_can = st.session_state.get('selected_canary', [])
                     st.rerun()
 
                 except Exception as e:
