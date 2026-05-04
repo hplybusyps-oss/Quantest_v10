@@ -82,28 +82,85 @@ def load_Stock_list():
 # st.rerun() 후 스크립트가 다시 시작될 때 이 부분이 먼저 실행됩니다.
 if 'config_to_load' in st.session_state:
     loaded_config = st.session_state.config_to_load
-    
-    # Stock_list.csv에서 전체 display 리스트를 임시로 가져옴
+
+    # ── 1. 티커 목록 (자산군) ────────────────────────────────────────────
     etf_df_for_update = load_Stock_list()
     if etf_df_for_update is not None:
         full_display_list = etf_df_for_update['display'].tolist()
 
-        # 불러온 티커 목록을 '티커 - 이름' 형식으로 변환하여 session_state에 직접 저장
         if 'tickers' in loaded_config:
             loaded_tickers = loaded_config['tickers']
-            st.session_state.selected_canary = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
+            st.session_state.selected_canary     = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('CANARY', [])]
             st.session_state.selected_aggressive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('AGGRESSIVE', [])]
-            st.session_state.selected_defensive = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
-        
-        # 벤치마크 정보 업데이트
+            st.session_state.selected_defensive  = [item for item in full_display_list if item.split(' - ')[0] in loaded_tickers.get('DEFENSIVE', [])]
+
         if 'benchmark' in loaded_config:
-            benchmark_ticker = loaded_config['benchmark']
-            # 불러온 벤치마크 티커에 해당하는 '티커 - 이름' 형식의 전체 이름을 찾습니다.
-            match = etf_df_for_update[etf_df_for_update['Ticker'] == benchmark_ticker]
+            match = etf_df_for_update[etf_df_for_update['Ticker'] == loaded_config['benchmark']]
             if not match.empty:
-                # 찾은 이름을 session_state에 저장합니다.
                 st.session_state.sidebar_benchmark_display = match.iloc[0]['display']
-       
+
+    # ── 2. 기본 설정 ─────────────────────────────────────────────────────
+    if 'start_date' in loaded_config:
+        st.session_state['sb_start_date'] = pd.to_datetime(loaded_config['start_date']).date()
+    if 'end_date' in loaded_config:
+        st.session_state['sb_end_date'] = pd.to_datetime(loaded_config['end_date']).date()
+    if 'initial_capital' in loaded_config:
+        st.session_state['sb_initial_capital'] = int(loaded_config['initial_capital'])
+    if 'monthly_contribution' in loaded_config:
+        st.session_state['sb_monthly_contribution'] = int(loaded_config['monthly_contribution'])
+
+    # ── 3. 전략 선택 ─────────────────────────────────────────────────────
+    if 'strategy_mode' in loaded_config:
+        st.session_state['sb_strategy_mode'] = loaded_config['strategy_mode']
+
+    # ── 4. 실행 엔진 설정 ────────────────────────────────────────────────
+    if 'backtest_type' in loaded_config:
+        st.session_state['sb_backtest_type'] = loaded_config['backtest_type']
+    if 'rebalance_freq' in loaded_config:
+        st.session_state['sb_rebalance_freq'] = loaded_config['rebalance_freq']
+    if 'rebalance_day' in loaded_config:
+        st.session_state['sb_rebalance_day'] = loaded_config['rebalance_day']
+    if 'transaction_cost' in loaded_config:
+        # config에는 소수로 저장 (0.001), 슬라이더는 % 단위 (0.1)
+        st.session_state['sb_transaction_cost'] = float(loaded_config['transaction_cost']) * 100
+    if 'risk_free_rate' in loaded_config:
+        st.session_state['sb_risk_free_rate'] = float(loaded_config['risk_free_rate']) * 100
+
+    # ── 5. 시그널 설정 ───────────────────────────────────────────────────
+    mom_params = loaded_config.get('momentum_params', {})
+    if mom_params.get('type'):
+        st.session_state['sb_momentum_type'] = mom_params['type']
+    if mom_params.get('periods'):
+        st.session_state['sb_momentum_periods_str'] = ', '.join(map(str, mom_params['periods']))
+
+    # ── 6. 포트폴리오 구성 전략 ──────────────────────────────────────────
+    port_params = loaded_config.get('portfolio_params', {})
+    if 'use_canary' in port_params:
+        st.session_state['sb_use_canary'] = bool(port_params['use_canary'])
+    if 'use_hybrid_protection' in port_params:
+        st.session_state['sb_use_hybrid_protection'] = bool(port_params['use_hybrid_protection'])
+    if 'top_n_aggressive' in port_params:
+        st.session_state['sb_top_n_aggressive'] = int(port_params['top_n_aggressive'])
+    if 'top_n_defensive' in port_params:
+        st.session_state['sb_top_n_defensive'] = int(port_params['top_n_defensive'])
+
+    # ── 7. A-Core 전용 설정 ──────────────────────────────────────────────
+    ac = loaded_config.get('acore_config') or {}
+    if ac:
+        if 'sp500_ticker' in ac:
+            st.session_state['sb_acore_sp500_ticker'] = ac['sp500_ticker']
+        if 'ma_period' in ac:
+            st.session_state['sb_acore_ma_period'] = int(ac['ma_period'])
+        if 'vol_window' in ac:
+            st.session_state['sb_acore_vol_window'] = int(ac['vol_window'])
+        if 'category_cap' in ac:
+            st.session_state['sb_acore_category_cap'] = int(ac['category_cap'])
+        if 'zscore_threshold' in ac:
+            st.session_state['sb_acore_zscore_threshold'] = float(ac['zscore_threshold'])
+        if 'category_map' in ac:
+            # 대체 자산 레이블 목록을 별도 저장 (위젯 렌더 시 사용)
+            st.session_state['sb_acore_alt_tickers'] = [tk for tk, cat in ac['category_map'].items() if cat == '대체']
+
     # 한 번 사용한 임시 변수는 즉시 삭제
     del st.session_state.config_to_load
 
@@ -114,24 +171,27 @@ st.sidebar.header("1. 기본 설정")
 
 start_date = st.sidebar.date_input(
     "시작일",
-    pd.to_datetime('2007-01-01').date(),
-    min_value=date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
-    max_value=date.today()
+    value=st.session_state.get('sb_start_date', pd.to_datetime('2007-01-01').date()),
+    min_value=date(1970, 1, 1),
+    max_value=date.today(),
+    key='sb_start_date'
 )
 end_date = st.sidebar.date_input(
     "종료일",
-    date.today(),
-    min_value=date(1970, 1, 1),  # 선택 가능한 가장 이른 날짜
-    max_value=date.today()
+    value=st.session_state.get('sb_end_date', date.today()),
+    min_value=date(1970, 1, 1),
+    max_value=date.today(),
+    key='sb_end_date'
 )
 
 # --- 통화 선택 UI를 제거하고, 나중에 티커 기반으로 자동 결정 ---
 
 initial_capital = st.sidebar.number_input(
     "초기 투자금액",
-    value=10000,
+    value=st.session_state.get('sb_initial_capital', 10000),
     min_value=0,
-    step=1000, # 천 단위로 조절하기 쉽게 step 추가
+    step=1000,
+    key='sb_initial_capital',
     help="백테스트를 시작하는 초기 총 자산입니다. 통화는 선택된 자산군에 따라 자동 결정됩니다."
 )
 # 입력된 금액을 천 단위 쉼표로 포맷하여 바로 아래에 표시
@@ -141,9 +201,10 @@ st.sidebar.markdown(f"<p style='text-align: right; color: #555; margin-top: -10p
 # 월별 추가 투자금액 입력
 monthly_contribution = st.sidebar.number_input(
     "월별 추가 투자금액",
-    value=0, # 기본값을 1000으로 변경
+    value=st.session_state.get('sb_monthly_contribution', 0),
     min_value=0,
-    step=100, # 백 단위로 조절하기 쉽게 step 추가
+    step=100,
+    key='sb_monthly_contribution',
     help="매월 리밸런싱 시점에 추가로 투자할 금액입니다."
 )
 # 입력된 금액을 천 단위 쉼표로 포맷하여 바로 아래에 표시
@@ -187,10 +248,12 @@ else:
 )
 
 st.sidebar.header("2. 전략 선택")
+_strategy_options = ('HAA', 'A-Core')
 strategy_mode = st.sidebar.radio(
     "운용 전략",
-    ('HAA', 'A-Core'),
-    index=0,
+    _strategy_options,
+    index=_strategy_options.index(st.session_state.get('sb_strategy_mode', 'HAA')),
+    key='sb_strategy_mode',
     help="""
     - **HAA**: 카나리아 자산의 양/음수 모멘텀으로 Risk-On/Off를 결정하는 기존 전략입니다.
     - **A-Core**: 시장 국면(강세/중립/약세)을 3단계로 세분화하고, 샤프비율 기반 랭킹 + 카테고리 캡으로 자산을 선정하는 고도화 전략입니다.
@@ -198,20 +261,24 @@ strategy_mode = st.sidebar.radio(
 )
 
 st.sidebar.header("3. 실행 엔진 설정")
+_bt_options = ('일별', '월별')
 backtest_type = st.sidebar.radio(
     "백테스트 데이터 기준",
-    ('일별', '월별'),
-    index=1,
+    _bt_options,
+    index=_bt_options.index(st.session_state.get('sb_backtest_type', '월별')),
+    key='sb_backtest_type',
     help="""
     백테스트의 시간 단위를 결정합니다.
     - **일별**: 일별 데이터 사용
     - **월별**: 월별 데이터 사용
     """
 )
+_rf_options = ('월별', '분기별')
 rebalance_freq = st.sidebar.radio(
     "리밸런싱 주기",
-    ('월별', '분기별'),
-    index=0,
+    _rf_options,
+    index=_rf_options.index(st.session_state.get('sb_rebalance_freq', '월별')),
+    key='sb_rebalance_freq',
     help="포트폴리오의 자산 비중을 **재조정(리밸런싱)하는 주기**를 선택합니다."
 )
 
@@ -229,14 +296,27 @@ rebalance_day_help = """
 - **사용 데이터:** 2월 1일까지의 모든 데이터
 - **결과:** "2월 1일의 성적"까지 포함하여 2월 계획을 짭니다.
 """
-rebalance_day = st.sidebar.radio("리밸런싱 기준일", ('월말', '월초'), index=0, help=rebalance_day_help)
+_rd_options = ('월말', '월초')
+rebalance_day = st.sidebar.radio(
+    "리밸런싱 기준일",
+    _rd_options,
+    index=_rd_options.index(st.session_state.get('sb_rebalance_day', '월말')),
+    key='sb_rebalance_day',
+    help=rebalance_day_help
+)
 
 transaction_cost = st.sidebar.slider(
-    "거래 비용 (%)", 0.0, 1.0, 0.1, 0.01,
+    "거래 비용 (%)", 0.0, 1.0,
+    value=float(st.session_state.get('sb_transaction_cost', 0.1)),
+    step=0.01,
+    key='sb_transaction_cost',
     help="매수 또는 매도 시 발생하는 **거래 비용(수수료, 슬리피지 등)을 시뮬레이션**합니다. 입력된 값은 편도(one-way) 기준입니다."
 )
 risk_free_rate = st.sidebar.slider(
-    "무위험 수익률 (%)", 0.0, 5.0, 1.5, 0.1,
+    "무위험 수익률 (%)", 0.0, 5.0,
+    value=float(st.session_state.get('sb_risk_free_rate', 1.5)),
+    step=0.1,
+    key='sb_risk_free_rate',
     help="**샤프 지수(Sharpe Ratio) 계산**에 사용되는 무위험 수익률입니다. 일반적으로 미국 단기 국채 금리를 사용하며, 연 수익률 기준으로 입력합니다."
 )
 
@@ -413,10 +493,18 @@ momentum_type_help = """
 - **평균 모멘텀**: 사용자가 **직접 입력한 기간들**의 수익률을 평균냅니다.
 - **상대 모멘텀**: 여러 자산 중 특정 기간 동안 가장 많이 상승한 자산을 선택합니다. (상승장 추종에 유리)
 """
-momentum_type = st.sidebar.selectbox("모멘텀 종류", ('13612U', '평균 모멘텀', '상대 모멘텀'), help=momentum_type_help)
+_mt_options = ('13612U', '평균 모멘텀', '상대 모멘텀')
+momentum_type = st.sidebar.selectbox(
+    "모멘텀 종류",
+    _mt_options,
+    index=_mt_options.index(st.session_state.get('sb_momentum_type', '13612U')),
+    key='sb_momentum_type',
+    help=momentum_type_help
+)
 momentum_periods_str = st.sidebar.text_input(
-    "모멘텀 기간 (개월, 쉼표로 구분)", 
-    value='1, 3, 6, 12', 
+    "모멘텀 기간 (개월, 쉼표로 구분)",
+    value=st.session_state.get('sb_momentum_periods_str', '1, 3, 6, 12'),
+    key='sb_momentum_periods_str',
     help="""
     - **13612U**: 이 입력값은 **무시**됩니다.
     - **평균 모멘텀**: 사용할 기간을 쉼표로 구분하여 입력합니다. (예: 3, 6, 9)
@@ -424,11 +512,37 @@ momentum_periods_str = st.sidebar.text_input(
     """
 )
 st.sidebar.header("6. 포트폴리오 구성 전략")
-use_canary = st.sidebar.toggle("카나리아 자산 사용 (Risk-On/Off)", value=True, help="체크 시, 카나리아 자산의 모멘텀이 양수일 때만 공격 자산에 투자합니다. 해제 시 항상 공격 자산군 내에서만 투자합니다.")
-use_hybrid_protection = st.sidebar.toggle("하이브리드 보호 장치 사용", value=True, help="체크 시, 공격 자산으로 선택되었어도 개별 모멘텀이 음수이면 안전 자산으로 교체합니다.")
-top_n_aggressive = st.sidebar.number_input("공격 자산 Top N", min_value=1, max_value=10, value=4, help="공격 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
-top_n_defensive = st.sidebar.number_input("방어 자산 Top N", min_value=1, max_value=10, value=1, help="방어 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
-weighting_scheme = st.sidebar.selectbox("자산 배분 방식", ('동일 비중 (Equal Weight)',), help="선택된 자산들에 어떤 비중으로 투자할지 결정합니다. (추후 확장 가능)")
+use_canary = st.sidebar.toggle(
+    "카나리아 자산 사용 (Risk-On/Off)",
+    value=st.session_state.get('sb_use_canary', True),
+    key='sb_use_canary',
+    help="체크 시, 카나리아 자산의 모멘텀이 양수일 때만 공격 자산에 투자합니다. 해제 시 항상 공격 자산군 내에서만 투자합니다."
+)
+use_hybrid_protection = st.sidebar.toggle(
+    "하이브리드 보호 장치 사용",
+    value=st.session_state.get('sb_use_hybrid_protection', True),
+    key='sb_use_hybrid_protection',
+    help="체크 시, 공격 자산으로 선택되었어도 개별 모멘텀이 음수이면 안전 자산으로 교체합니다."
+)
+top_n_aggressive = st.sidebar.number_input(
+    "공격 자산 Top N",
+    min_value=1, max_value=10,
+    value=st.session_state.get('sb_top_n_aggressive', 4),
+    key='sb_top_n_aggressive',
+    help="공격 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다."
+)
+top_n_defensive = st.sidebar.number_input(
+    "방어 자산 Top N",
+    min_value=1, max_value=10,
+    value=st.session_state.get('sb_top_n_defensive', 1),
+    key='sb_top_n_defensive',
+    help="방어 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다."
+)
+weighting_scheme = st.sidebar.selectbox(
+    "자산 배분 방식",
+    ('동일 비중 (Equal Weight)',),
+    help="선택된 자산들에 어떤 비중으로 투자할지 결정합니다. (추후 확장 가능)"
+)
 
 # =============================================================================
 #    [A-Core 신규] A-Core 전략 전용 사이드바 설정
@@ -446,29 +560,42 @@ if strategy_mode == 'A-Core':
     with st.sidebar.expander("🌡️ 시장 국면 판단 설정", expanded=True):
         sp500_ticker_acore = st.text_input(
             "S&P500 지수 티커",
-            value="^GSPC",
+            value=st.session_state.get('sb_acore_sp500_ticker', '^GSPC'),
+            key='sb_acore_sp500_ticker',
             help="강세/중립 국면 판단에 사용하는 S&P500 지수 티커입니다. `^GSPC`는 Yahoo Finance 기준 S&P500 지수의 정식 티커이며 오류가 아닙니다. 한국 ETF(예: 069500.KS)로 대체 가능합니다."
         )
         ma_period_acore = st.number_input(
             "이동평균선 기간 (일)",
-            min_value=20, max_value=400, value=200, step=10,
+            min_value=20, max_value=400,
+            value=st.session_state.get('sb_acore_ma_period', 200),
+            step=10,
+            key='sb_acore_ma_period',
             help="S&P500 지수의 이동평균선 기간입니다. 기본값 200일.\n\n[국면 판단 기준]\n- 강세: TIP 모멘텀>0 & S&P500 > MA\n- 중립: TIP 모멘텀>0 & S&P500 < MA\n- 약세: TIP 모멘텀 ≤ 0"
         )
     
     with st.sidebar.expander("📊 랭킹 & 위험관리 설정", expanded=True):
         vol_window_acore = st.number_input(
             "변동성 계산 기간 (일)",
-            min_value=20, max_value=120, value=60, step=5,
+            min_value=20, max_value=120,
+            value=st.session_state.get('sb_acore_vol_window', 60),
+            step=5,
+            key='sb_acore_vol_window',
             help="샤프비율 랭킹의 분모에 사용되는 변동성 계산 기간 (영업일 기준). 기본값 60일(약 3개월)."
         )
         category_cap_acore = st.number_input(
             "카테고리 캡 (카테고리별 최대 편입 수)",
-            min_value=1, max_value=5, value=2, step=1,
+            min_value=1, max_value=5,
+            value=st.session_state.get('sb_acore_category_cap', 2),
+            step=1,
+            key='sb_acore_category_cap',
             help="동일 카테고리(주식/대체/안전)에서 Top N 순위에 들어올 수 있는 최대 자산 수입니다."
         )
         zscore_threshold_acore = st.slider(
             "변동성 Z-Score 임계값",
-            min_value=0.5, max_value=3.0, value=1.5, step=0.1,
+            min_value=0.5, max_value=3.0,
+            value=float(st.session_state.get('sb_acore_zscore_threshold', 1.5)),
+            step=0.1,
+            key='sb_acore_zscore_threshold',
             help="최근 1개월 변동성이 [12개월 평균 + (표준편차 × 임계값)]을 초과하면 과변동성으로 판단합니다."
         )
     
@@ -496,9 +623,16 @@ if strategy_mode == 'A-Core':
             _all_labels = list(_tk_labels.values())
             _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
-            # 대체 자산 기본 자동 추론 힌트 (원자재, 금 등)
+            # 대체 자산 기본값: pkl 복원 시 sb_acore_alt_tickers 우선, 없으면 힌트 자동 추론
             _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', 'GNR', 'VNQ', 'IYR']
-            _valid_default_alt = [_tk_labels[t] for t in _agg_tickers_for_cat if t.upper() in _DEFAULT_ALT_HINTS and t in _tk_labels]
+            _loaded_alt_tickers = st.session_state.get('sb_acore_alt_tickers', None)
+            if _loaded_alt_tickers is not None:
+                # pkl에서 복원된 대체 자산 목록을 label 형식으로 변환
+                _valid_default_alt = [_tk_labels[t] for t in _loaded_alt_tickers if t in _tk_labels]
+                # 한 번 사용 후 삭제 (이후 사용자가 직접 변경 가능하도록)
+                del st.session_state['sb_acore_alt_tickers']
+            else:
+                _valid_default_alt = [_tk_labels[t] for t in _agg_tickers_for_cat if t.upper() in _DEFAULT_ALT_HINTS and t in _tk_labels]
 
             # 오직 '대체 자산'만 다중 선택 위젯으로 구현
             st.markdown("**대체 자산 선택**")
@@ -884,7 +1018,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     3. 변동성 Z-Score 필터 (과변동성 자산 제외)
     4. 샤프비율 랭킹 = 모멘텀 / 변동성
     5. 카테고리 캡 적용 후 Top N 선정
-    6. 약세 국면: 방어 자산 중 모멘텀 Top N 자산에 분산 투자 (수정됨)
+    6. 약세 국면: 방어 자산 중 모멘텀 1위 자산에 100% 집중
 
     Returns:
         (target_weights DataFrame, investment_mode Series, phase_scores_log dict)
@@ -897,7 +1031,6 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
 
     params = config['portfolio_params']
     top_n = params.get('top_n_aggressive', 4)
-    top_n_def = params.get('top_n_defensive', 1)  # [추가] 사이드바의 방어 자산 개수 가져오기
 
     canary_tickers = [t for t in config['tickers']['CANARY'] if t in successful_tickers]
     aggressive_assets = [t for t in config['tickers']['AGGRESSIVE'] if t in successful_tickers]
@@ -909,7 +1042,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     phase_scores_log = {}  # 국면별 점수 로그 (시각화용)
 
     def get_vol(ticker, date):
-        """연율화 변동성(기준) 계산 헬퍼"""
+        """연율화 변동성(90일 기준) 계산 헬퍼"""
         price_hist = prices[ticker].loc[:date]
         if len(price_hist) < vol_window + 1:
             return np.nan
@@ -924,7 +1057,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     for date in rebal_dates:
         phase = market_phase_series.get(date, '약세')
 
-        # ── 약세 국면: 방어 자산 중 모멘텀 Top N 선정하여 분산 투자 ──────────
+        # ── 약세 국면: 방어 자산 중 모멘텀 1위 100% 집중 ──────────────────
         if phase == '약세':
             investment_mode[date] = '약세 (Defensive)'
             mom_all = calculate_acore_momentum(date, prices, config, '약세')  # 한 번만 계산
@@ -939,29 +1072,16 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
                 def_scores[ticker] = mom_score
 
             if def_scores:
-                # [수정] 점수 순으로 정렬하여 상위 Top N개 추출
-                sorted_def = sorted(def_scores.items(), key=lambda x: x[1], reverse=True)[:top_n_def]
-                selected_def = [t for t, _ in sorted_def]
-                
-                weight_per = 1.0 / len(selected_def)
-                for asset in selected_def:
-                    target_weights.loc[date, asset] = weight_per
-                
-                phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': selected_def}
+                best_def = max(def_scores, key=def_scores.get)
+                target_weights.loc[date, best_def] = 1.0
+                phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': [best_def]}
             else:
-                # 방어 자산도 모멘텀 양수인 것이 없으면 모든 방어 자산 중 최고 모멘텀 Top N으로 fallback
+                # 방어 자산도 모멘텀 양수인 것이 없으면 모든 방어 자산 중 최고 모멘텀으로 fallback
                 if defensive_assets:
                     all_def_scores = {t: mom_all.get(t, -np.inf) if hasattr(mom_all, 'get') else (mom_all[t] if t in mom_all.index else -np.inf) for t in defensive_assets}
-                    
-                    # [수정] 차선책(fallback)인 경우에도 Top N 분산 투자 적용
-                    sorted_fallback = sorted(all_def_scores.items(), key=lambda x: x[1], reverse=True)[:top_n_def]
-                    selected_fallback = [t for t, _ in sorted_fallback]
-                    
-                    weight_per = 1.0 / len(selected_fallback)
-                    for asset in selected_fallback:
-                        target_weights.loc[date, asset] = weight_per
-                        
-                    phase_scores_log[date] = {'phase': phase, 'scores': all_def_scores, 'selected': selected_fallback}
+                    best_fallback = max(all_def_scores, key=all_def_scores.get)
+                    target_weights.loc[date, best_fallback] = 1.0
+                    phase_scores_log[date] = {'phase': phase, 'scores': all_def_scores, 'selected': [best_fallback]}
             continue
 
         # ── 강세/중립 국면 ─────────────────────────────────────────────────
