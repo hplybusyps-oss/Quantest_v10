@@ -256,7 +256,9 @@ with st.sidebar.expander("티커 관리"):
     
     current_stocks_df = load_Stock_list()
     if current_stocks_df is not None:
-        st.dataframe(current_stocks_df, height=100)
+        # 행 수에 맞게 높이를 동적으로 계산 (헤더 35px + 행당 35px, 최소 100px)
+        dynamic_height = max(100, 35 + len(current_stocks_df) * 35)
+        st.dataframe(current_stocks_df, height=dynamic_height, use_container_width=True)
     else:
         st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
 
@@ -428,7 +430,7 @@ if strategy_mode == 'A-Core (신규)':
         sp500_ticker_acore = st.text_input(
             "S&P500 지수 티커",
             value="^GSPC",
-            help="강세/중립 국면 판단에 사용되는 S&P500 지수 티커입니다."
+            help="강세/중립 국면 판단에 사용하는 S&P500 지수 티커입니다. `^GSPC`는 Yahoo Finance 기준 S&P500 지수의 정식 티커이며 오류가 아닙니다. 한국 ETF(예: 069500.KS)로 대체 가능합니다."
         )
         ma_period_acore = st.number_input(
             "이동평균선 기간 (일)",
@@ -455,25 +457,85 @@ if strategy_mode == 'A-Core (신규)':
         )
     
     with st.sidebar.expander("🗂️ A-Core 자산 카테고리 설정"):
-        st.caption("""
-        카테고리 캡 적용을 위해 공격 자산군의 각 티커에 카테고리를 지정하세요.
-        형식: `티커:카테고리` (예: `SPY:주식, GLD:대체, BND:채권`)
-        """)
-        acore_category_input = st.text_area(
-            "티커 카테고리 매핑",
-            value="SPY:주식, QQQ:주식, EWJ:주식, INDA:주식, VNQ:리츠, GLD:대체, DBC:대체, TIP:채권, IEF:채권, TLT:채권",
-            help="공격 자산의 카테고리를 지정합니다. 지정되지 않은 티커는 '기타'로 분류됩니다."
-        )
-        # 카테고리 매핑 딕셔너리 파싱
-        acore_category_map = {}
-        try:
-            for item in acore_category_input.split(','):
-                item = item.strip()
-                if ':' in item:
-                    ticker_part, cat_part = item.split(':', 1)
-                    acore_category_map[ticker_part.strip().upper()] = cat_part.strip()
-        except Exception:
-            st.warning("카테고리 매핑 형식을 확인해 주세요.")
+        st.caption("공격 자산 각각의 카테고리를 선택하세요. 카테고리 캡은 동일 카테고리 내 최대 편입 수를 제한합니다.")
+
+        # 선택된 공격 자산 목록 가져오기
+        _agg_tickers_for_cat = [s.split(' - ')[0] for s in st.session_state.get('selected_aggressive', [])]
+
+        CATEGORY_OPTIONS = ['주식', '대체', '채권', '리츠', '안전자산', '기타']
+
+        # session_state에 카테고리 매핑 딕셔너리 초기화
+        if 'acore_cat_map_state' not in st.session_state:
+            st.session_state.acore_cat_map_state = {}
+
+        # 기본 카테고리 자동 추론 (처음 보는 티커에 대해 휴리스틱 적용)
+        _DEFAULT_CAT_HINTS = {
+            'SPY': '주식', 'QQQ': '주식', 'IWM': '주식', 'EFA': '주식', 'VWO': '주식',
+            'EWJ': '주식', 'INDA': '주식', 'EWZ': '주식', 'FXI': '주식',
+            'VNQ': '리츠', 'IYR': '리츠', 'RWX': '리츠',
+            'GLD': '대체', 'IAU': '대체', 'SLV': '대체', 'DBC': '대체', 'USO': '대체', 'PDBC': '대체',
+            'TIP': '채권', 'IEF': '채권', 'TLT': '채권', 'BND': '채권', 'AGG': '채권', 'LQD': '채권',
+            'BIL': '안전자산', 'SHV': '안전자산', 'SHY': '안전자산',
+        }
+
+        if not _agg_tickers_for_cat:
+            st.info("공격 자산을 먼저 선택하면 카테고리를 지정할 수 있습니다.")
+        else:
+            # 카테고리별 컬러 뱃지 정의
+            _CAT_COLORS = {
+                '주식':    '#1f77b4',
+                '대체':    '#ff7f0e',
+                '채권':    '#2ca02c',
+                '리츠':    '#9467bd',
+                '안전자산': '#d62728',
+                '기타':    '#7f7f7f',
+            }
+
+            # 각 티커별로 selectbox 렌더링
+            acore_category_map = {}
+            for tk in _agg_tickers_for_cat:
+                # 기본값: 이미 선택한 값 → 자동 추론 → '기타'
+                default_cat = st.session_state.acore_cat_map_state.get(
+                    tk,
+                    _DEFAULT_CAT_HINTS.get(tk.upper(), '기타')
+                )
+                default_idx = CATEGORY_OPTIONS.index(default_cat) if default_cat in CATEGORY_OPTIONS else len(CATEGORY_OPTIONS) - 1
+
+                # 티커 표시명 (이름 있으면 함께 표시)
+                _tk_label = tk
+                if etf_df is not None:
+                    _m = etf_df[etf_df['Ticker'] == tk]
+                    if not _m.empty:
+                        _tk_label = f"{tk} ({_m.iloc[0]['Name'][:12]}…)" if len(_m.iloc[0]['Name']) > 12 else f"{tk} ({_m.iloc[0]['Name']})"
+
+                chosen = st.selectbox(
+                    _tk_label,
+                    options=CATEGORY_OPTIONS,
+                    index=default_idx,
+                    key=f'acore_cat_{tk}'
+                )
+                st.session_state.acore_cat_map_state[tk] = chosen
+                acore_category_map[tk] = chosen
+
+            # 현재 매핑 요약 표시
+            st.divider()
+            st.caption("📋 현재 카테고리 요약")
+            from collections import defaultdict as _dd
+            _grouped = _dd(list)
+            for tk, cat in acore_category_map.items():
+                _grouped[cat].append(tk)
+            for cat, tks in sorted(_grouped.items()):
+                color = _CAT_COLORS.get(cat, '#888')
+                tks_str = ', '.join(tks)
+                st.markdown(
+                    f'<span style="background:{color};color:white;padding:2px 7px;border-radius:10px;font-size:0.78em;font-weight:bold;">{cat}</span> '
+                    f'<span style="font-size:0.85em;">{tks_str}</span>',
+                    unsafe_allow_html=True
+                )
+    
+    # 공격 자산이 없거나 expander 밖에서도 acore_category_map이 정의되도록 보장
+    if '_agg_tickers_for_cat' not in dir() or not _agg_tickers_for_cat:
+        acore_category_map = st.session_state.get('acore_cat_map_state', {})
     
     acore_config = {
         'sp500_ticker': sp500_ticker_acore,
@@ -953,6 +1015,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
 
 
 def calculate_signals(prices, config):
+    prices_copy = prices.copy()  # ← NameError 수정: prices_copy 정의 누락 보완
     day_option = 'last' if config['rebalance_day'] == '월말' else 'first'
     if config['rebalance_freq'] == '분기별':
         prices_copy['year_quarter'] = prices_copy.index.to_period('Q').strftime('%Y-Q%q')
