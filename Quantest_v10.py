@@ -266,27 +266,36 @@ with st.sidebar.expander("티커 관리"):
     st.markdown("###### 신규 티커 추가")
 
     with st.form(key='add_ticker_form', clear_on_submit=True):
-        new_ticker = st.text_input("추가할 티커 (예: TSLA)").strip().upper()
-        new_name = st.text_input("추가할 주식/ETF 이름 (예: Tesla Inc.)").strip()
+        # 이름 입력칸을 없애고 티커만 입력받습니다.
+        new_ticker = st.text_input("추가할 티커만 입력하세요 (예: TSLA)").strip().upper()
         
         submitted = st.form_submit_button("티커 추가하기")
         if submitted:
-            if new_ticker and new_name:
-                # --- [수정] 파일 경로를 먼저 찾습니다 ---
+            if new_ticker:
+                # 1. 야후 파이낸스에서 티커를 검색하여 이름을 자동으로 가져옵니다.
+                try:
+                    ticker_info = yf.Ticker(new_ticker).info
+                    # 긴 이름(longName)을 먼저 찾고, 없으면 짧은 이름(shortName), 둘 다 없으면 티커를 그대로 씁니다.
+                    fetched_name = ticker_info.get('longName', ticker_info.get('shortName', new_ticker))
+                    new_name = str(fetched_name)
+                except Exception:
+                    new_name = new_ticker # 인터넷 문제 등으로 검색에 실패하면 임시로 티커를 이름으로 사용
+                    
+                # 2. 파일 경로를 찾습니다.
                 if getattr(sys, 'frozen', False):
                     application_path = os.path.dirname(sys.executable)
                 else:
                     application_path = os.path.dirname(os.path.abspath(__file__))
                 csv_path = os.path.join(application_path, 'Stock_list.csv')
 
-                # --- [수정] 캐시가 아닌, 실제 파일을 직접 읽어 중복을 확인합니다 ---
+                # 3. 중복 확인을 위해 기존 파일을 읽습니다.
                 try:
                     df_from_disk = pd.read_csv(csv_path, encoding='utf-8')
                 except FileNotFoundError:
                     df_from_disk = pd.DataFrame(columns=['Ticker'])
                 
+                # 4. 티커가 중복되지 않았다면 파일에 저장합니다.
                 if new_ticker not in df_from_disk['Ticker'].str.upper().values:
-                    # --- (이하 파일에 추가하는 로직은 동일) ---
                     try:
                         import csv
                         file_exists = os.path.exists(csv_path)
@@ -298,7 +307,8 @@ with st.sidebar.expander("티커 관리"):
                         
                         st.success(f"'{new_name}' ({new_ticker}) 추가 완료!")
                         load_Stock_list.clear()
-                        # --- [수정] 값이 없을 경우 에러 없이 빈 리스트를 반환하도록 안전하게 수정 ---
+                        
+                        # 화면 새로고침 시 에러를 방지하는 안전한 코드
                         st.session_state.temp_selection_agg = st.session_state.get('selected_aggressive', [])
                         st.session_state.temp_selection_def = st.session_state.get('selected_defensive', [])
                         st.session_state.temp_selection_can = st.session_state.get('selected_canary', [])                                           
@@ -308,7 +318,7 @@ with st.sidebar.expander("티커 관리"):
                 else:
                     st.error(f"'{new_ticker}'는 이미 존재하는 티커입니다.")
             else:
-                st.warning("티커와 이름을 모두 입력해주세요.")
+                st.warning("추가할 티커를 입력해주세요.")
 
     # --- [순서 변경] 2. 기존 티커 삭제 ---
     if current_stocks_df is not None and not current_stocks_df.empty:
