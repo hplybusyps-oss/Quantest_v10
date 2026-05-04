@@ -266,35 +266,44 @@ with st.sidebar.expander("티커 관리"):
     st.markdown("###### 신규 티커 추가")
 
     with st.form(key='add_ticker_form', clear_on_submit=True):
-        # 이름 입력칸을 없애고 티커만 입력받습니다.
-        new_ticker = st.text_input("추가할 티커만 입력하세요 (예: TSLA)").strip().upper()
+        new_ticker = st.text_input("추가할 티커 (예: TSLA)").strip().upper()
+        # 이름을 선택적으로 입력받도록 칸을 다시 추가합니다.
+        new_name_input = st.text_input("종목명 (비워두면 자동으로 검색합니다)").strip()
         
         submitted = st.form_submit_button("티커 추가하기")
         if submitted:
             if new_ticker:
-                # 1. 야후 파이낸스에서 티커를 검색하여 이름을 자동으로 가져옵니다.
-                try:
-                    ticker_info = yf.Ticker(new_ticker).info
-                    # 긴 이름(longName)을 먼저 찾고, 없으면 짧은 이름(shortName), 둘 다 없으면 티커를 그대로 씁니다.
-                    fetched_name = ticker_info.get('longName', ticker_info.get('shortName', new_ticker))
-                    new_name = str(fetched_name)
-                except Exception:
-                    new_name = new_ticker # 인터넷 문제 등으로 검색에 실패하면 임시로 티커를 이름으로 사용
-                    
-                # 2. 파일 경로를 찾습니다.
+                new_name = new_name_input
+                warning_msg = ""
+                
+                # 사용자가 이름을 비워둔 경우에만 야후 파이낸스 자동 검색 시도
+                if not new_name:
+                    try:
+                        ticker_info = yf.Ticker(new_ticker).info
+                        fetched_name = ticker_info.get('longName', ticker_info.get('shortName', ''))
+                        if fetched_name:
+                            new_name = str(fetched_name)
+                        else:
+                            new_name = new_ticker
+                            warning_msg = "\n(⚠️ 야후 서버에서 이름을 찾지 못해 티커명으로 임시 저장되었습니다. 목록에서 삭제 후 이름을 직접 입력해 추가하실 수 있습니다.)"
+                    except Exception:
+                        new_name = new_ticker
+                        warning_msg = "\n(⚠️ 인터넷/서버 문제로 이름을 찾지 못해 티커명으로 임시 저장되었습니다.)"
+
+                # 2. 파일 경로 설정
                 if getattr(sys, 'frozen', False):
                     application_path = os.path.dirname(sys.executable)
                 else:
                     application_path = os.path.dirname(os.path.abspath(__file__))
                 csv_path = os.path.join(application_path, 'Stock_list.csv')
 
-                # 3. 중복 확인을 위해 기존 파일을 읽습니다.
+                # 3. 중복 확인을 위해 기존 파일 읽기
                 try:
                     df_from_disk = pd.read_csv(csv_path, encoding='utf-8')
                 except FileNotFoundError:
                     df_from_disk = pd.DataFrame(columns=['Ticker'])
                 
-                # 4. 티커가 중복되지 않았다면 파일에 저장합니다.
+                # 4. 파일에 저장
                 if new_ticker not in df_from_disk['Ticker'].str.upper().values:
                     try:
                         import csv
@@ -305,10 +314,10 @@ with st.sidebar.expander("티커 관리"):
                                 writer.writerow(['Ticker', 'Name'])
                             writer.writerow([new_ticker, new_name])
                         
-                        st.success(f"'{new_name}' ({new_ticker}) 추가 완료!")
+                        # 기존 코드에 있던 토스트 알림 기능을 활용해 성공/경고 메시지 전달
+                        st.session_state.toast_message = f"'{new_name}' ({new_ticker}) 추가 완료! {warning_msg}"
                         load_Stock_list.clear()
                         
-                        # 화면 새로고침 시 에러를 방지하는 안전한 코드
                         st.session_state.temp_selection_agg = st.session_state.get('selected_aggressive', [])
                         st.session_state.temp_selection_def = st.session_state.get('selected_defensive', [])
                         st.session_state.temp_selection_can = st.session_state.get('selected_canary', [])                                           
