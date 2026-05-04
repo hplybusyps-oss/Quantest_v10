@@ -50,7 +50,7 @@ plt.rc('axes', unicode_minus=False)
 # -----------------------------------------------------------------------------
 # 1. GUI 화면 구성 (Streamlit)
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크", page_icon="📈", layout="wide")
+st.set_page_config(page_title="[Quantest] 퀀트 백테스트 프레임워크 v1.3", page_icon="📈", layout="wide")
 
 # --- [추가] 새로고침 후 메시지를 표시하는 로직 ---
 if 'toast_message' in st.session_state:
@@ -187,7 +187,18 @@ else:
         help="전략의 성과를 비교하기 위한 기준 지수(벤치마크의 티커를 입력하세요."
 )
 
-st.sidebar.header("2. 실행 엔진 설정")
+st.sidebar.header("2. 전략 선택")
+strategy_mode = st.sidebar.radio(
+    "운용 전략",
+    ('HAA (기존)', 'A-Core (신규)'),
+    index=0,
+    help="""
+    - **HAA (기존)**: 카나리아 자산의 양/음수 모멘텀으로 Risk-On/Off를 결정하는 기존 전략입니다.
+    - **A-Core (신규)**: 시장 국면(강세/중립/약세)을 3단계로 세분화하고, 샤프비율 기반 랭킹 + 카테고리 캡으로 자산을 선정하는 고도화 전략입니다.
+    """
+)
+
+st.sidebar.header("3. 실행 엔진 설정")
 backtest_type = st.sidebar.radio(
     "백테스트 데이터 기준",
     ('일별', '월별'),
@@ -334,7 +345,7 @@ with st.sidebar.expander("티커 관리"):
             else:
                 st.warning("삭제할 티커를 먼저 선택해주세요.")
 
-st.sidebar.header("3. 자산군 설정")
+st.sidebar.header("4. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
 
@@ -377,7 +388,7 @@ else:
     defensive_tickers = [t.strip().upper() for t in defensive_tickers_str.split(',')]
     canary_tickers = [t.strip().upper() for t in canary_tickers_str.split(',')]
 
-st.sidebar.header("4. 시그널 설정")
+st.sidebar.header("5. 시그널 설정")
 momentum_type_help = """
 - **13612U**: **1, 3, 6, 12개월** 수익률을 평균내어 안정적인 신호를 만듭니다. (HAA 전략 기본값)
 - **평균 모멘텀**: 사용자가 **직접 입력한 기간들**의 수익률을 평균냅니다.
@@ -393,12 +404,87 @@ momentum_periods_str = st.sidebar.text_input(
     - **상대 모멘텀**: 입력된 숫자 중 **첫 번째 값**만 사용합니다. (예: '6' 입력 시 6개월 상대 모멘텀)
     """
 )
-st.sidebar.header("5. 포트폴리오 구성 전략")
+st.sidebar.header("6. 포트폴리오 구성 전략")
 use_canary = st.sidebar.toggle("카나리아 자산 사용 (Risk-On/Off)", value=True, help="체크 시, 카나리아 자산의 모멘텀이 양수일 때만 공격 자산에 투자합니다. 해제 시 항상 공격 자산군 내에서만 투자합니다.")
 use_hybrid_protection = st.sidebar.toggle("하이브리드 보호 장치 사용", value=True, help="체크 시, 공격 자산으로 선택되었어도 개별 모멘텀이 음수이면 안전 자산으로 교체합니다.")
 top_n_aggressive = st.sidebar.number_input("공격 자산 Top N", min_value=1, max_value=10, value=4, help="공격 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
 top_n_defensive = st.sidebar.number_input("방어 자산 Top N", min_value=1, max_value=10, value=1, help="방어 자산군에서 모멘텀 순위가 높은 상위 N개의 자산을 선택합니다.")
 weighting_scheme = st.sidebar.selectbox("자산 배분 방식", ('동일 비중 (Equal Weight)',), help="선택된 자산들에 어떤 비중으로 투자할지 결정합니다. (추후 확장 가능)")
+
+# =============================================================================
+#    [A-Core 신규] A-Core 전략 전용 사이드바 설정
+# =============================================================================
+if strategy_mode == 'A-Core (신규)':
+    st.sidebar.header("7. A-Core 전략 설정")
+    
+    st.sidebar.markdown("""
+    <div style='background-color:#1a3a5c; padding:10px; border-radius:8px; color:#aad4f5; font-size:0.85em; margin-bottom:10px;'>
+    ⚡ <b>A-Core 전략 활성화</b><br>
+    시장 국면(강세/중립/약세) 3단계 판단 + 샤프비율 랭킹 + 카테고리 캡 적용
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.sidebar.expander("🌡️ 시장 국면 판단 설정", expanded=True):
+        sp500_ticker_acore = st.text_input(
+            "S&P500 지수 티커",
+            value="^GSPC",
+            help="강세/중립 국면 판단에 사용되는 S&P500 지수 티커입니다."
+        )
+        ma_period_acore = st.number_input(
+            "이동평균선 기간 (일)",
+            min_value=20, max_value=400, value=200, step=10,
+            help="S&P500 지수의 이동평균선 기간입니다. 기본값 200일."
+        )
+        st.caption("강세: TIP 모멘텀>0 & S&P500 > MA  |  중립: TIP 모멘텀>0 & S&P500 < MA  |  약세: TIP 모멘텀 ≤ 0")
+    
+    with st.sidebar.expander("📊 랭킹 & 위험관리 설정", expanded=True):
+        vol_window_acore = st.number_input(
+            "변동성 계산 기간 (일)",
+            min_value=20, max_value=120, value=90, step=5,
+            help="샤프비율 랭킹의 분모에 사용되는 변동성 계산 기간 (영업일 기준). 기본값 90일."
+        )
+        category_cap_acore = st.number_input(
+            "카테고리 캡 (카테고리별 최대 편입 수)",
+            min_value=1, max_value=5, value=2, step=1,
+            help="동일 카테고리(주식/대체/안전)에서 Top N 순위에 들어올 수 있는 최대 자산 수입니다."
+        )
+        zscore_threshold_acore = st.slider(
+            "변동성 Z-Score 임계값",
+            min_value=0.5, max_value=3.0, value=1.5, step=0.1,
+            help="최근 1개월 변동성이 [12개월 평균 + (표준편차 × 임계값)]을 초과하면 과변동성으로 판단합니다."
+        )
+    
+    with st.sidebar.expander("🗂️ A-Core 자산 카테고리 설정"):
+        st.caption("""
+        카테고리 캡 적용을 위해 공격 자산군의 각 티커에 카테고리를 지정하세요.
+        형식: `티커:카테고리` (예: `SPY:주식, GLD:대체, BND:채권`)
+        """)
+        acore_category_input = st.text_area(
+            "티커 카테고리 매핑",
+            value="SPY:주식, QQQ:주식, EWJ:주식, INDA:주식, VNQ:리츠, GLD:대체, DBC:대체, TIP:채권, IEF:채권, TLT:채권",
+            help="공격 자산의 카테고리를 지정합니다. 지정되지 않은 티커는 '기타'로 분류됩니다."
+        )
+        # 카테고리 매핑 딕셔너리 파싱
+        acore_category_map = {}
+        try:
+            for item in acore_category_input.split(','):
+                item = item.strip()
+                if ':' in item:
+                    ticker_part, cat_part = item.split(':', 1)
+                    acore_category_map[ticker_part.strip().upper()] = cat_part.strip()
+        except Exception:
+            st.warning("카테고리 매핑 형식을 확인해 주세요.")
+    
+    acore_config = {
+        'sp500_ticker': sp500_ticker_acore,
+        'ma_period': ma_period_acore,
+        'vol_window': vol_window_acore,
+        'category_cap': category_cap_acore,
+        'zscore_threshold': zscore_threshold_acore,
+        'category_map': acore_category_map,
+    }
+else:
+    acore_config = None
 
 # 모멘텀 기간 문자열을 숫자리스트로 변환하는 로직을 사이드바 영역으로 이동
 try:
@@ -418,7 +504,9 @@ def gather_current_config():
         'momentum_params': {'type': momentum_type, 'periods': momentum_periods},
         'portfolio_params': {'use_canary': use_canary, 'use_hybrid_protection': use_hybrid_protection,
                              'top_n_aggressive': top_n_aggressive, 'top_n_defensive': top_n_defensive,
-                             'weighting': weighting_scheme}
+                             'weighting': weighting_scheme},
+        'strategy_mode': strategy_mode,
+        'acore_config': acore_config,
     }
 
 # 앱이 재실행될 때마다 현재 설정을 가져옴
@@ -537,8 +625,334 @@ def calculate_full_momentum(prices, config):
     full_momentum_scores = sum(returns_dfs) / len(returns_dfs)
     return full_momentum_scores
 
-def calculate_signals(prices, config):
+# =============================================================================
+#   [A-Core 신규] 핵심 백엔드 로직 함수
+# =============================================================================
+
+def determine_market_phase(prices: pd.DataFrame, canary_tickers: list, config: dict) -> pd.Series:
+    """
+    매 리밸런싱 시점마다 시장 국면(강세/중립/약세)을 판단합니다.
+
+    국면 판단 기준:
+    - 강세: TIP 평균 모멘텀 > 0  AND  S&P500 > MA
+    - 중립: TIP 평균 모멘텀 > 0  AND  S&P500 <= MA
+    - 약세: TIP 평균 모멘텀 <= 0  (카나리아 발동)
+
+    Returns:
+        pd.Series: 리밸런싱 날짜를 인덱스로 갖는 국면 시리즈 ('강세'/'중립'/'약세')
+    """
+    acore_cfg = config.get('acore_config', {})
+    sp500_ticker = acore_cfg.get('sp500_ticker', '^GSPC')
+    ma_period = int(acore_cfg.get('ma_period', 200))
+
+    # 리밸런싱 날짜 추출
     prices_copy = prices.copy()
+    day_option = 'last' if config['rebalance_day'] == '월말' else 'first'
+    if config['rebalance_freq'] == '분기별':
+        prices_copy['_yq'] = prices_copy.index.to_period('Q').strftime('%Y-Q%q')
+        rebal_dates = prices_copy.drop_duplicates('_yq', keep=day_option).index
+    else:
+        prices_copy['_ym'] = prices_copy.index.strftime('%Y-%m')
+        rebal_dates = prices_copy.drop_duplicates('_ym', keep=day_option).index
+
+    # S&P500 이동평균선 계산 (사용 가능한 경우)
+    sp500_ma = None
+    if sp500_ticker in prices.columns:
+        sp500_ma = prices[sp500_ticker].rolling(window=ma_period, min_periods=ma_period // 2).mean()
+
+    # 모멘텀 기간 확정 (13612U 기준)
+    mom_type = config['momentum_params']['type']
+    mom_periods = [1, 3, 6, 12] if mom_type == '13612U' else config['momentum_params'].get('periods', [1, 3, 6, 12])
+
+    market_phase = pd.Series(index=rebal_dates, dtype=str)
+
+    for date in rebal_dates:
+        # 1. 카나리아 평균 모멘텀 계산 (TIP 모멘텀)
+        valid_canary = [t for t in canary_tickers if t in prices.columns]
+        if not valid_canary:
+            market_phase[date] = '약세'
+            continue
+
+        returns_list = []
+        for month in mom_periods:
+            past_date = date - pd.DateOffset(months=month)
+            if past_date < prices.index[0]:
+                returns_list.append(pd.Series(0.0, index=valid_canary))
+                continue
+            idx = prices.index.get_indexer([past_date], method='nearest')[0]
+            past_prices = prices.iloc[idx][valid_canary]
+            curr_prices = prices.loc[date, valid_canary]
+            returns_list.append(curr_prices / past_prices - 1)
+
+        canary_momentum = sum(returns_list) / len(returns_list)
+        avg_canary_score = canary_momentum.mean() if not canary_momentum.empty else -1
+
+        # 2. 약세 국면: 카나리아 모멘텀 <= 0
+        if avg_canary_score <= 0:
+            market_phase[date] = '약세'
+            continue
+
+        # 3. 강세/중립 국면: S&P500 vs MA 비교
+        if sp500_ma is not None and date in sp500_ma.index and not pd.isna(sp500_ma.loc[date]):
+            sp500_price_idx = prices.index.get_indexer([date], method='nearest')[0]
+            sp500_price = prices.iloc[sp500_price_idx].get(sp500_ticker, None)
+            if sp500_price is not None and not pd.isna(sp500_price):
+                if sp500_price > sp500_ma.loc[date]:
+                    market_phase[date] = '강세'
+                else:
+                    market_phase[date] = '중립'
+            else:
+                market_phase[date] = '중립'
+        else:
+            # S&P500 데이터 없으면 중립으로 처리
+            market_phase[date] = '중립'
+
+    return market_phase
+
+
+def calculate_acore_momentum(date: pd.Timestamp, prices: pd.DataFrame,
+                              config: dict, market_phase: str) -> pd.Series:
+    """
+    국면에 따라 가중/평균 모멘텀 점수를 계산합니다.
+
+    ■ 평균 모멘텀 (중립/약세 국면)
+        score = (r1 + r3 + r6 + r12) / 4
+        → 1, 3, 6, 12개월 수익률에 동일 가중치(각 25%) 부여
+
+    ■ 가중 모멘텀 (강세 국면)
+        weights = {1개월: 4/10, 3개월: 3/10, 6개월: 2/10, 12개월: 1/10}
+        score = r1×0.4 + r3×0.3 + r6×0.2 + r12×0.1
+        → 가중치 합 = 1.0 (수익률 자체를 부풀리지 않음)
+        → 단기일수록 높은 비중을 줌으로써 최근 추세에 더 빠르게 반응
+
+    Returns:
+        pd.Series: 티커별 모멘텀 점수 (수익률 단위, 부풀림 없음)
+    """
+    tickers = [t for t in prices.columns if t in prices.columns]
+
+    returns_by_month = {}
+    mom_periods = [1, 3, 6, 12]
+    for month in mom_periods:
+        past_date = date - pd.DateOffset(months=month)
+        if past_date < prices.index[0]:
+            returns_by_month[month] = pd.Series(0.0, index=tickers)
+            continue
+        idx = prices.index.get_indexer([past_date], method='nearest')[0]
+        past_prices = prices.iloc[idx][tickers]
+        curr_prices = prices.loc[date, tickers]
+        returns_by_month[month] = curr_prices / past_prices - 1
+
+    if market_phase == '강세':
+        # 가중 모멘텀: 단기일수록 높은 비중, 가중치 합 = 1.0
+        # 1개월(40%) > 3개월(30%) > 6개월(20%) > 12개월(10%)
+        score = (
+            returns_by_month[1]  * 0.4 +
+            returns_by_month[3]  * 0.3 +
+            returns_by_month[6]  * 0.2 +
+            returns_by_month[12] * 0.1
+        )
+    else:
+        # 평균 모멘텀: 중립/약세 국면, 동일 가중치 각 25%, 합 = 1.0
+        score = (
+            returns_by_month[1]  * 0.25 +
+            returns_by_month[3]  * 0.25 +
+            returns_by_month[6]  * 0.25 +
+            returns_by_month[12] * 0.25
+        )
+
+    return score
+
+
+def calculate_volatility_zscore_filter(date: pd.Timestamp, prices: pd.DataFrame,
+                                        ticker: str, vol_window: int = 90,
+                                        zscore_threshold: float = 1.5) -> bool:
+    """
+    변동성 Z-Score 필터: 비정상적 과변동성 자산을 제외합니다.
+
+    조건: 최근 1개월 변동성 > 12개월 평균 변동성 + (표준편차 × 임계값)
+    True 반환 → 정상 (통과), False 반환 → 과변동성 (탈락)
+    """
+    if ticker not in prices.columns:
+        return False
+
+    # 최근 1개월(21영업일) 일별 수익률 변동성
+    price_hist = prices[ticker].loc[:date]
+    if len(price_hist) < vol_window + 21:
+        return True  # 데이터 부족 시 필터 미적용 (통과)
+
+    daily_returns = price_hist.pct_change().dropna()
+
+    # 12개월(252영업일)치의 1개월 롤링 변동성 시계열
+    rolling_vol_1m = daily_returns.rolling(21).std() * np.sqrt(252)
+    hist_vol_series = rolling_vol_1m.iloc[-252:].dropna()
+
+    if len(hist_vol_series) < 6:
+        return True  # 불충분한 히스토리 → 통과
+
+    # 최근 1개월 변동성
+    recent_vol = daily_returns.iloc[-21:].std() * np.sqrt(252)
+
+    vol_mean = hist_vol_series.mean()
+    vol_std = hist_vol_series.std()
+
+    threshold = vol_mean + vol_std * zscore_threshold
+    return recent_vol <= threshold  # 임계 초과 시 False (탈락)
+
+
+def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
+                               successful_tickers: list,
+                               market_phase_series: pd.Series) -> tuple:
+    """
+    A-Core 전략의 포트폴리오를 구성합니다.
+
+    핵심 로직:
+    1. 국면별 모멘텀 가중 방식 적용
+    2. 절대 모멘텀 필터 (모멘텀 > 0만 매수 대상)
+    3. 변동성 Z-Score 필터 (과변동성 자산 제외)
+    4. 샤프비율 랭킹 = 모멘텀 / 변동성
+    5. 카테고리 캡 적용 후 Top N 선정
+    6. 약세 국면: 방어 자산 중 모멘텀 1위 자산에 100% 집중
+
+    Returns:
+        (target_weights DataFrame, investment_mode Series, phase_scores_log dict)
+    """
+    acore_cfg = config.get('acore_config', {})
+    vol_window = int(acore_cfg.get('vol_window', 90))
+    category_cap = int(acore_cfg.get('category_cap', 2))
+    zscore_threshold = float(acore_cfg.get('zscore_threshold', 1.5))
+    category_map = acore_cfg.get('category_map', {})
+
+    params = config['portfolio_params']
+    top_n = params.get('top_n_aggressive', 4)
+
+    canary_tickers = [t for t in config['tickers']['CANARY'] if t in successful_tickers]
+    aggressive_assets = [t for t in config['tickers']['AGGRESSIVE'] if t in successful_tickers]
+    defensive_assets = [t for t in config['tickers']['DEFENSIVE'] if t in successful_tickers]
+
+    rebal_dates = market_phase_series.index
+    target_weights = pd.DataFrame(0.0, index=rebal_dates, columns=prices.columns)
+    investment_mode = pd.Series(index=rebal_dates, dtype=str)
+    phase_scores_log = {}  # 국면별 점수 로그 (시각화용)
+
+    def get_vol(ticker, date):
+        """연율화 변동성(90일 기준) 계산 헬퍼"""
+        price_hist = prices[ticker].loc[:date]
+        if len(price_hist) < vol_window + 1:
+            return np.nan
+        daily_ret = price_hist.pct_change().dropna().iloc[-vol_window:]
+        if len(daily_ret) < 5:
+            return np.nan
+        return daily_ret.std() * np.sqrt(252)
+
+    def get_category(ticker):
+        return category_map.get(ticker.upper(), '기타')
+
+    for date in rebal_dates:
+        phase = market_phase_series.get(date, '약세')
+
+        # ── 약세 국면: 방어 자산 중 모멘텀 1위 100% 집중 ──────────────────
+        if phase == '약세':
+            investment_mode[date] = '약세 (Defensive)'
+            def_scores = {}
+            for ticker in defensive_assets:
+                mom = calculate_acore_momentum(date, prices, config, '약세')
+                mom_score = mom.get(ticker, np.nan) if hasattr(mom, 'get') else (mom[ticker] if ticker in mom.index else np.nan)
+                # 절대 모멘텀 필터 & 변동성 필터
+                if pd.isna(mom_score) or mom_score <= 0:
+                    continue
+                if not calculate_volatility_zscore_filter(date, prices, ticker, vol_window, zscore_threshold):
+                    continue
+                def_scores[ticker] = mom_score
+
+            if def_scores:
+                best_def = max(def_scores, key=def_scores.get)
+                target_weights.loc[date, best_def] = 1.0
+                phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': [best_def]}
+            else:
+                # 방어 자산도 없으면 가장 모멘텀 높은 방어 자산으로 fallback
+                if defensive_assets:
+                    target_weights.loc[date, defensive_assets[0]] = 1.0
+            continue
+
+        # ── 강세/중립 국면 ─────────────────────────────────────────────────
+        investment_mode[date] = '강세 (Aggressive)' if phase == '강세' else '중립 (Neutral)'
+        mom_scores = calculate_acore_momentum(date, prices, config, phase)
+
+        sharpe_scores = {}
+        for ticker in aggressive_assets:
+            mom_score = mom_scores.get(ticker, np.nan) if hasattr(mom_scores, 'get') else (mom_scores[ticker] if ticker in mom_scores.index else np.nan)
+
+            # 기본 방어 1: 모멘텀 > 0 필터 (절대 모멘텀)
+            if pd.isna(mom_score) or mom_score <= 0:
+                continue
+
+            # 기본 방어 2: 과변동성 Z-Score 필터
+            if not calculate_volatility_zscore_filter(date, prices, ticker, vol_window, zscore_threshold):
+                continue
+
+            # 변동성 계산 (샤프비율 분모)
+            vol = get_vol(ticker, date)
+            if pd.isna(vol) or vol <= 0:
+                continue
+
+            # 안전자산은 강세/중립 국면에서 제외 (분모의 함정 방지)
+            cat = get_category(ticker)
+            if cat == '안전자산':
+                continue
+
+            sharpe_scores[ticker] = mom_score / vol
+
+        if not sharpe_scores:
+            # 공격 자산 없으면 방어 자산으로 대피
+            def_scores = {}
+            for ticker in defensive_assets:
+                mom = calculate_acore_momentum(date, prices, config, phase)
+                ms = mom.get(ticker, np.nan) if hasattr(mom, 'get') else (mom[ticker] if ticker in mom.index else np.nan)
+                if not pd.isna(ms) and ms > 0:
+                    def_scores[ticker] = ms
+            if def_scores:
+                best_def = max(def_scores, key=def_scores.get)
+                target_weights.loc[date, best_def] = 1.0
+            elif defensive_assets:
+                target_weights.loc[date, defensive_assets[0]] = 1.0
+            phase_scores_log[date] = {'phase': phase, 'scores': {}, 'selected': []}
+            continue
+
+        # ── 카테고리 캡 적용 ───────────────────────────────────────────────
+        # 카테고리별로 상위 category_cap개 티커만 남기고, 그 안에서 전체 샤프 순위를 매김
+        sorted_by_sharpe = sorted(sharpe_scores.items(), key=lambda x: x[1], reverse=True)
+        category_count = {}
+        filtered_scores = {}
+        for ticker, score in sorted_by_sharpe:
+            cat = get_category(ticker)
+            cnt = category_count.get(cat, 0)
+            if cnt < category_cap:
+                filtered_scores[ticker] = score
+                category_count[cat] = cnt + 1
+
+        if not filtered_scores:
+            phase_scores_log[date] = {'phase': phase, 'scores': sharpe_scores, 'selected': []}
+            continue
+
+        # ── Top N 선정 및 동일 비중 배분 ──────────────────────────────────
+        top_sorted = sorted(filtered_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        selected_assets = [t for t, _ in top_sorted]
+
+        weight_per = 1.0 / len(selected_assets)
+        for asset in selected_assets:
+            target_weights.loc[date, asset] = weight_per
+
+        phase_scores_log[date] = {
+            'phase': phase,
+            'scores': filtered_scores,
+            'sharpe_raw': sharpe_scores,
+            'selected': selected_assets
+        }
+
+    return target_weights, investment_mode, phase_scores_log
+
+
+def calculate_signals(prices, config):
     day_option = 'last' if config['rebalance_day'] == '월말' else 'first'
     if config['rebalance_freq'] == '분기별':
         prices_copy['year_quarter'] = prices_copy.index.to_period('Q').strftime('%Y-Q%q')
@@ -673,7 +1087,7 @@ def get_saved_results(directory="backtest_results"):
 st.markdown("<a id='top'></a>", unsafe_allow_html=True)
 
 
-st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.2")
+st.title("📈 [Quantest] 퀀트 백테스트 프레임워크_v1.3")
 
 # session_state에 표시할 토스트 메시지가 저장되어 있는지 확인합니다.
 if 'toast_message' in st.session_state:
@@ -705,6 +1119,12 @@ if run_button_clicked:
     config = current_config 
     
     all_tickers = sorted(list(set(aggressive_tickers + defensive_tickers + canary_tickers + [benchmark_ticker])))
+    
+    # A-Core 전략 시 S&P500 지수도 데이터 다운로드 대상에 추가
+    if config.get('strategy_mode') == 'A-Core (신규)' and config.get('acore_config'):
+        sp500_tk = config['acore_config'].get('sp500_ticker', '^GSPC')
+        if sp500_tk not in all_tickers:
+            all_tickers.append(sp500_tk)
     
     if any(ticker.endswith('.KS') for ticker in all_tickers):
         currency_symbol = '₩'
@@ -741,7 +1161,20 @@ if run_button_clicked:
         momentum_scores = calculate_signals(prices, config)
         if momentum_scores.empty: st.error("모멘텀 시그널 계산에 실패했습니다."); st.stop()
         
-        target_weights, investment_mode = construct_portfolio(momentum_scores, config, prices.columns.tolist())
+        # ── 전략 분기: HAA vs A-Core ──────────────────────────────────────
+        phase_scores_log = None
+        market_phase_series = None
+
+        if config.get('strategy_mode') == 'A-Core (신규)' and config.get('acore_config'):
+            with st.spinner('🌡️ A-Core: 시장 국면 판단 중...'):
+                market_phase_series = determine_market_phase(prices, canary_tickers, config)
+            with st.spinner('📊 A-Core: 샤프비율 랭킹 & 카테고리 캡 적용 중...'):
+                target_weights, investment_mode, phase_scores_log = construct_acore_portfolio(
+                    prices, config, prices.columns.tolist(), market_phase_series
+                )
+        else:
+            target_weights, investment_mode = construct_portfolio(momentum_scores, config, prices.columns.tolist())
+        # ─────────────────────────────────────────────────────────────────
         
         returns_freq = config['backtest_type'].split(' ')[0]
         if returns_freq == '월별':
@@ -802,9 +1235,11 @@ if run_button_clicked:
         
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
-            'max_momentum_period': max_momentum_period, # 계산된 최대 모멘텀 기간을 결과에 추가
+            'max_momentum_period': max_momentum_period,
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
+            'market_phase_series': market_phase_series,
+            'phase_scores_log': phase_scores_log,
             'timeseries': {
                 'portfolio_value': cumulative_returns,
                 'benchmark_value': benchmark_cumulative,
@@ -1068,22 +1503,29 @@ with tab1:
 
           # [추가] 사용한 포트폴리오 구성 전략 정보 표시
         with st.expander("사용한 포트폴리오 구성 전략"):
-            # .pkl 파일의 config에서 포트폴리오 관련 정보 추출
             portfolio_params = config.get('portfolio_params', {})
-            
-            # 각 전략 설정을 가져옵니다.
             use_canary = portfolio_params.get('use_canary', False)
             use_hybrid = portfolio_params.get('use_hybrid_protection', False)
             top_agg = portfolio_params.get('top_n_aggressive', 'N/A')
             top_def = portfolio_params.get('top_n_defensive', 'N/A')
             weighting = portfolio_params.get('weighting', 'N/A')
-
-            # 보기 좋게 포맷하여 표시합니다.
+            st.markdown(f"**운용 전략**: `{config.get('strategy_mode', 'HAA (기존)')}`")
             st.markdown(f"**카나리아 자산 사용 (Risk-On/Off)**: `{'사용' if use_canary else '미사용'}`")
             st.markdown(f"**하이브리드 보호 장치 사용**: `{'사용' if use_hybrid else '미사용'}`")
             st.markdown(f"**공격 자산 Top N**: `{top_agg}`")
             st.markdown(f"**방어 자산 Top N**: `{top_def}`")
-            st.markdown(f"**자산 배분 방식**: `{weighting}`")     
+            st.markdown(f"**자산 배분 방식**: `{weighting}`")
+            
+            # A-Core 전용 설정 표시
+            if config.get('strategy_mode') == 'A-Core (신규)' and config.get('acore_config'):
+                ac = config['acore_config']
+                st.divider()
+                st.markdown("**A-Core 전략 설정**")
+                st.markdown(f"- S&P500 티커: `{ac.get('sp500_ticker', '^GSPC')}`")
+                st.markdown(f"- 이동평균 기간: `{ac.get('ma_period', 200)}일`")
+                st.markdown(f"- 변동성 계산 기간: `{ac.get('vol_window', 90)}일`")
+                st.markdown(f"- 카테고리 캡: `{ac.get('category_cap', 2)}`")
+                st.markdown(f"- Z-Score 임계값: `{ac.get('zscore_threshold', 1.5)}`")     
             
         # 모든 메시지 표시 후, 분석 데이터를 시작일 기준으로 필터링
         backtest_start_date = pd.to_datetime(results['config']['start_date'])
@@ -1098,6 +1540,73 @@ with tab1:
         prices = results['prices']
         
         st.header("2. 시그널 모멘텀")
+        
+        # ── [A-Core 신규] 시장 국면 판단 결과 표시 ─────────────────────────
+        if config.get('strategy_mode') == 'A-Core (신규)':
+            market_phase_series = results.get('market_phase_series')
+            phase_scores_log = results.get('phase_scores_log')
+
+            if market_phase_series is not None and not market_phase_series.empty:
+                st.subheader("🌡️ A-Core 시장 국면 판단 결과")
+
+                # 국면 통계
+                phase_counts = market_phase_series.value_counts()
+                total = len(market_phase_series)
+                col_bull, col_neut, col_bear = st.columns(3)
+                with col_bull:
+                    cnt = phase_counts.get('강세', 0)
+                    st.metric("🟢 강세 국면", f"{cnt}회", f"{cnt/total:.1%}")
+                with col_neut:
+                    cnt = phase_counts.get('중립', 0)
+                    st.metric("🟡 중립 국면", f"{cnt}회", f"{cnt/total:.1%}")
+                with col_bear:
+                    cnt = phase_counts.get('약세', 0)
+                    st.metric("🔴 약세 국면 (카나리아)", f"{cnt}회", f"{cnt/total:.1%}")
+
+                # 국면 시계열 차트
+                phase_numeric = market_phase_series.map({'강세': 2, '중립': 1, '약세': 0})
+                fig_phase, ax_phase = plt.subplots(figsize=(10, 2.5))
+                colors_map = {2: 'green', 1: 'gold', 0: 'red'}
+                for i in range(len(phase_numeric) - 1):
+                    d0, d1 = phase_numeric.index[i], phase_numeric.index[i+1]
+                    val = phase_numeric.iloc[i]
+                    c = colors_map.get(val, 'grey')
+                    ax_phase.axvspan(d0, d1, facecolor=c, alpha=0.4)
+                ax_phase.set_yticks([0, 1, 2])
+                ax_phase.set_yticklabels(['약세', '중립', '강세'], fontsize=10)
+                ax_phase.set_title('시장 국면 추이 (A-Core)', fontsize=13)
+                ax_phase.set_xlabel('Date'); ax_phase.grid(axis='x', linestyle='--', linewidth=0.4)
+                st.pyplot(fig_phase)
+
+                # 샤프비율 점수 로그 상세 보기
+                if phase_scores_log:
+                    with st.expander("📊 A-Core 샤프비율 랭킹 상세 (최근 12회)"):
+                        recent_dates = sorted(phase_scores_log.keys(), reverse=True)[:12]
+                        for d in recent_dates:
+                            log = phase_scores_log[d]
+                            phase_str = log.get('phase', '-')
+                            scores = log.get('scores', {})
+                            selected = log.get('selected', [])
+                            if not scores:
+                                st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 편입 자산 없음 (현금)")
+                                continue
+                            rows = []
+                            for tk, sc in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+                                name = tk
+                                if etf_df is not None:
+                                    m = etf_df[etf_df['Ticker'] == tk]
+                                    if not m.empty:
+                                        name = f"{tk} - {m.iloc[0]['Name']}"
+                                rows.append({
+                                    '자산': name,
+                                    '샤프비율 점수': f"{sc:.4f}",
+                                    '선택': '✅' if tk in selected else ''
+                                })
+                            df_log = pd.DataFrame(rows)
+                            st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '없음'}")
+                            st.dataframe(df_log.set_index('자산'), use_container_width=True)
+
+            st.divider()
         # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
         st.subheader("📊 카나리아 모멘텀 추이 vs. 벤치마크 가격")
         
@@ -1389,7 +1898,17 @@ with tab1:
                 start_interval = mode_changes[i]
                 end_interval = mode_changes[i+1] if i+1 < len(mode_changes) else cumulative_returns.index[-1]
                 mode = investment_mode.loc[start_interval]
-                color = 'lightgreen' if mode == 'Aggressive' else 'lightyellow'
+                # A-Core: 3단계 색상 / HAA: 기존 2단계 색상
+                if '강세' in mode:
+                    color = 'lightgreen'
+                elif '중립' in mode:
+                    color = 'lightyellow'
+                elif '약세' in mode:
+                    color = 'mistyrose'
+                elif mode == 'Aggressive':
+                    color = 'lightgreen'
+                else:
+                    color = 'lightyellow'
                 ax.axvspan(start_interval, end_interval, facecolor=color, alpha=0.3)
         line1, = ax.plot(cumulative_returns.index, cumulative_returns, label='Strategy', color='royalblue', linewidth=1.0)
         line2, = ax.plot(benchmark_cumulative.index, benchmark_cumulative, label='Benchmark', color='grey', linewidth=1.0)
@@ -1400,16 +1919,21 @@ with tab1:
 
         # 2. 유효한 날짜가 있을 경우, X축의 시작과 끝에 동적인 여백을 줍니다.
         if first_valid_date is not None and last_valid_date is not None:
-            # 전체 기간의 약 5%에 해당하는 날짜 수를 계산하여 여백으로 사용
             margin_days = (last_valid_date - first_valid_date).days * 0.05
-            
-            # 시작점은 여백만큼 앞으로, 끝점은 여백만큼 뒤로 설정
             graph_start_date = first_valid_date - pd.DateOffset(days=margin_days)
             graph_end_date = last_valid_date + pd.DateOffset(days=margin_days)
-            
             ax.set_xlim(left=graph_start_date, right=graph_end_date)      
-            
-        legend_handles = [line1, line2, Patch(facecolor='lightgreen', label='Aggressive'), Patch(facecolor='lightyellow', label='Defensive')]
+        
+        # A-Core vs HAA 범례 구분
+        if config.get('strategy_mode') == 'A-Core (신규)':
+            legend_handles = [
+                line1, line2,
+                Patch(facecolor='lightgreen', label='강세 (Bull)'),
+                Patch(facecolor='lightyellow', label='중립 (Neutral)'),
+                Patch(facecolor='mistyrose', label='약세 (Bear/Defensive)'),
+            ]
+        else:
+            legend_handles = [line1, line2, Patch(facecolor='lightgreen', label='Aggressive'), Patch(facecolor='lightyellow', label='Defensive')]
         ax.set_title('Cumulative Value Over Time', fontsize=16)
         ax.set_xlabel('Date', fontsize=12); ax.set_ylabel('Portfolio Value', fontsize=12)
         formatter = mtick.FuncFormatter(lambda y, _: format_large_number(y, symbol=currency_symbol))
@@ -1837,19 +2361,3 @@ st.markdown(
     unsafe_allow_html=True
 
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
