@@ -60,19 +60,17 @@ if 'toast_message' in st.session_state:
     del st.session_state.toast_message
 
 @st.cache_data
-# --- [추가/수정] 파일 경로 전역 변수 설정 및 함수 최적화 ---
-# 프로그램 실행 시 폴더 경로를 한 번만 계산하여 속도를 높입니다.
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STOCK_CSV_PATH = os.path.join(BASE_DIR, 'Stock_list.csv')
-
-@st.cache_data
 def load_Stock_list():
     try:
-        # 매번 경로를 계산하지 않고 미리 찾아둔 경로(STOCK_CSV_PATH)를 사용합니다.
-        df = pd.read_csv(STOCK_CSV_PATH, encoding='utf-8')
+        if getattr(sys, 'frozen', False):
+            application_path = os.path.dirname(sys.executable)
+        else:
+            application_path = os.path.dirname(os.path.abspath(__file__))
+        
+        csv_path = os.path.join(application_path, 'Stock_list.csv')
+
+        df = pd.read_csv(csv_path, encoding='utf-8')
+        
         df['display'] = df['Ticker'] + ' - ' + df['Name']
         return df
     except FileNotFoundError:
@@ -1009,56 +1007,47 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
 
 
 def calculate_signals(prices, config):
-    try:
-        prices_copy = prices.copy()
-        day_option = 'last' if config['rebalance_day'] == '월말' else 'first'
-        
-        if config['rebalance_freq'] == '분기별':
-            prices_copy['year_quarter'] = prices_copy.index.to_period('Q').strftime('%Y-Q%q')
-            rebal_dates = prices_copy.drop_duplicates('year_quarter', keep=day_option).index
-        else: # 월별
-            prices_copy['year_month'] = prices_copy.index.strftime('%Y-%m')
-            rebal_dates = prices_copy.drop_duplicates('year_month', keep=day_option).index
+    prices_copy = prices.copy()  # ← NameError 수정: prices_copy 정의 누락 보완
+    day_option = 'last' if config['rebalance_day'] == '월말' else 'first'
+    if config['rebalance_freq'] == '분기별':
+        prices_copy['year_quarter'] = prices_copy.index.to_period('Q').strftime('%Y-Q%q')
+        rebal_dates = prices_copy.drop_duplicates('year_quarter', keep=day_option).index
+    else: # 월별
+        prices_copy['year_month'] = prices_copy.index.strftime('%Y-%m')
+        rebal_dates = prices_copy.drop_duplicates('year_month', keep=day_option).index
 
-        momentum_scores = pd.DataFrame(index=rebal_dates, columns=prices.columns)
-        mom_type = config['momentum_params']['type']
+    momentum_scores = pd.DataFrame(index=rebal_dates, columns=prices.columns)
+    mom_type = config['momentum_params']['type']
 
-        if mom_type == '13612U':
-            mom_periods = [1, 3, 6, 12]
-        else:
-            mom_periods = config['momentum_params']['periods']
+    # --- CHANGED: '13612U' 선택 시 기간을 고정하도록 수정 ---
+    if mom_type == '13612U':
+        mom_periods = [1, 3, 6, 12]
+    else:
+        mom_periods = config['momentum_params']['periods']
 
-        if mom_type in ['13612U', '평균 모멘텀']:
-            for date in rebal_dates:
-                returns = []
-                for month in mom_periods:
-                    past_date = date - pd.DateOffset(months=month)
-                    if past_date < prices.index[0]:
-                        returns.append(pd.Series(0.0, index=prices.columns))
-                        continue
-                    past_price_idx = prices.index.get_indexer([past_date], method='nearest')[0]
-                    returns.append(prices.loc[date] / prices.iloc[past_price_idx] - 1)
-                if returns:
-                    valid_returns = [r for r in returns if not r.empty]
-                    if valid_returns: 
-                        momentum_scores.loc[date] = sum(valid_returns) / len(valid_returns)
-                    else: 
-                        momentum_scores.loc[date] = 0.0
-        
-        elif mom_type == '상대 모멘텀':
-            if not mom_periods: 
-                st.error("모멘텀 기간이 설정되지 않았습니다.")
-                return pd.DataFrame()
-            period_days = mom_periods[0] * 21 
-            momentum_scores = prices.pct_change(periods=period_days)
-            momentum_scores = momentum_scores.loc[rebal_dates].fillna(0)
-                
-        return momentum_scores.astype(float)
-
-    except Exception as e:
-        # 데이터 오류가 발생해도 프로그램이 튕기지 않도록 방어
-        st.error(f"모멘텀 시그널 계산 중 예기치 않은 오류가 발생했습니다: {e}")
-        return pd.DataFrame()
+    # --- CHANGED: '13612U'와 '평균 모멘텀' 로직 통합 및 '절대 모멘텀' 삭제 ---
+    if mom_type in ['13612U', '평균 모멘텀']:
+        for date in rebal_dates:
+            returns = []
+            for month in mom_periods:
+                past_date = date - pd.DateOffset(months=month)
+                if past_date < prices.index[0]:
+                    returns.append(pd.Series(0.0, index=prices.columns))
+                    continue
+                past_price_idx = prices.index.get_indexer([past_date], method='nearest')[0]
+                returns.append(prices.loc[date] / prices.iloc[past_price_idx] - 1)
+            if returns:
+                valid_returns = [r for r in returns if not r.empty]
+                if valid_returns: momentum_scores.loc[date] = sum(valid_returns) / len(valid_returns)
+                else: momentum_scores.loc[date] = 0.0
+    
+    elif mom_type == '상대 모멘텀':
+        if not mom_periods: st.error("모멘텀 기간이 설정되지 않았습니다."); return pd.DataFrame()
+        period_days = mom_periods[0] * 21 
+        momentum_scores = prices.pct_change(periods=period_days)
+        momentum_scores = momentum_scores.loc[rebal_dates].fillna(0)
+            
+    return momentum_scores.astype(float)
 
 def construct_portfolio(momentum_scores, config, successful_tickers):
     canary_assets = [t for t in config['tickers']['CANARY'] if t in successful_tickers]
@@ -2045,25 +2034,17 @@ with tab1:
         st.subheader("📅 연도별 수익률")
         col1_annual, col2_annual = st.columns([1, 2])
         returns_freq = config['backtest_type'].split(' ')[0]
-        
-        # 벡터 연산을 활용한 초고속 수익률 계산 (Pandas 최신 버전 호환)
         if returns_freq == '일별':
-            monthly_pf_returns_for_annual = (1 + portfolio_returns).resample('ME').prod() - 1
-            monthly_bm_returns_for_annual = (1 + benchmark_returns).resample('ME').prod() - 1
+            monthly_pf_returns_for_annual = portfolio_returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
+            monthly_bm_returns_for_annual = benchmark_returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
         else:
-            monthly_pf_returns_for_annual = portfolio_returns
-            monthly_bm_returns_for_annual = benchmark_returns
-            
-        annual_returns = (1 + monthly_pf_returns_for_annual).resample('YE').prod() - 1
-        annual_returns = annual_returns.to_frame(name="Strategy")
-        
-        bm_annual_returns = (1 + monthly_bm_returns_for_annual).resample('YE').prod() - 1
-        bm_annual_returns = bm_annual_returns.to_frame(name="Benchmark")
-        
+            monthly_pf_returns_for_annual = portfolio_returns; monthly_bm_returns_for_annual = benchmark_returns
+        annual_returns = monthly_pf_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Strategy")
+        bm_annual_returns = monthly_bm_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Benchmark")
         annual_df = pd.concat([annual_returns, bm_annual_returns], axis=1)
         annual_df.index = annual_df.index.year
         annual_df.index = annual_df.index.astype(str)
-        annual_df.index.name = "Date"
+        annual_df.index.name = "Date" # 인덱스 이름 재설정        
         with col1_annual: st.dataframe(annual_df.style.format("{:.2%}"))
         with col2_annual:
             fig2, ax2 = plt.subplots(figsize=(10, 5))
