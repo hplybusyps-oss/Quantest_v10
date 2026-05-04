@@ -1386,12 +1386,33 @@ if run_button_clicked:
                     prices, config, prices.columns.tolist(), market_phase_series
                 )
                 
-                # --- [추가] 표와 그래프에 A-Core 국면별 점수가 나오도록 덮어쓰기 ---
-                dynamic_mom_scores = pd.DataFrame(index=market_phase_series.index, columns=prices.columns, dtype=float)
+                # --- [수정] A-Core: 표와 그래프에 샤프비율(모멘텀/변동성) 점수가 나오도록 덮어쓰기 ---
+                dynamic_sharpe_scores = pd.DataFrame(index=market_phase_series.index, columns=prices.columns, dtype=float)
+                vol_window = int(config['acore_config'].get('vol_window', 60)) # 설정된 변동성 기간 사용
+                
                 for date in market_phase_series.index:
                     phase = market_phase_series.get(date, '약세')
-                    dynamic_mom_scores.loc[date] = calculate_acore_momentum(date, prices, config, phase)
-                momentum_scores = dynamic_mom_scores 
+                    # 1. 국면별 모멘텀(수익률) 계산
+                    moms = calculate_acore_momentum(date, prices, config, phase)
+                    
+                    for ticker in prices.columns:
+                        # 2. 각 종목별 변동성 계산 (설정된 영업일 기준)
+                        price_hist = prices[ticker].loc[:date]
+                        if len(price_hist) > vol_window:
+                            daily_ret = price_hist.pct_change().dropna().iloc[-vol_window:]
+                            vol = daily_ret.std() * np.sqrt(252)
+                            
+                            if vol > 0:
+                                # 3. 샤프비율 = 모멘텀 / 변동성
+                                mom_val = moms.get(ticker, 0)
+                                dynamic_sharpe_scores.loc[date, ticker] = mom_val / vol
+                            else:
+                                dynamic_sharpe_scores.loc[date, ticker] = 0
+                        else:
+                            dynamic_sharpe_scores.loc[date, ticker] = 0
+                            
+                # 최종적으로 샤프비율 점수를 화면 출력용 변수에 할당
+                momentum_scores = dynamic_sharpe_scores 
         else:
             target_weights, investment_mode = construct_portfolio(momentum_scores, config, prices.columns.tolist())
         # ─────────────────────────────────────────────────────────────────
