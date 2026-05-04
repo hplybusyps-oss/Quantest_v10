@@ -1,43 +1,44 @@
 Ticker,Name
-SPY,SPDR S&P 500 ETF Trust
-IVV,iShares CORE S&P 500 ETF
-VOO,Vanguard S&P 500 ETF
-QQQ,Invesco QQQ Trust
-IWM,iShares Russell 2000 ETF
-VEA,Vanguard FTSE Developed Markets ETF
-VWO,Vanguard FTSE Emerging Markets ETF
-EFA,iShares MSCI EAFE ETF
-EEM,iShares MSCI Emerging Markets ETF
-VNQ,Vanguard Real Estate ETF
-DBC,Invesco DB Commodity Index Tracking Fund
-GSG,iShares S&P GSCI Commodity-Indexed Trust
-PDBC,Invesco Optimum Yield Diversified Commodity Strategy No K-1 ETF
-IEF,iShares 7-10 Year Treasury Bond ETF
-TLT,iShares 20+ Year Treasury Bond ETF
-LQD,iShares iBoxx USD Investment Grade Corporate Bond ETF
-BIL,SPDR Bloomberg 1-3 Month T-Bill ETF
-SHY,iShares 1-3 Year Treasury Bond ETF
 TIP,iShares TIPS Bond ETF
-GLD,SPDR Gold Shares
+SPY,SPDR S&P 500 ETF Trust
+QQQ,Invesco QQQ Trust
+IWM,iShares Russell 2000 ETF [소형주]
+EFA,iShares MSCI EAFE ETF [선진국]
+EEM,iShares MSCI Emerging Markets ETF [신흥국]
+VNQ,Vanguard Real Estate ETF [리츠]
+DBC,Invesco DB Commodity Index Tracking Fund [원자재]
+PDBC,Invesco Optimum Yield Diversified Commodity Strategy No K-1 ETF [원자재]
+TLT,iShares 20+ Year Treasury Bond ETF [장기채]
+GLD,SPDR Gold Shares [금]
+EWY,iShares MSCI Korea ETF [한국]
+EWJ,iShares MSCI Japan ETF [일본]
+INDA,iShares MSCI India ETF [인도]
+ASHR,Xtrackers Harvest CSI 300 China A-Shares ETF [중국 A주]
+KWEB,KraneShares CSI China Internet ETF [중국 인터넷 기업]
+GNR,SPDR S&P Global Natural Resources ETF [글로벌 천연자원]
+IEF,iShares 7-10 Year Treasury Bond ETF [중기채]
+SHY,iShares 1-3 Year Treasury Bond ETF [단기채]
+BIL,SPDR Bloomberg 1-3 Month T-Bill ETF [초단기채]
 
-069500.KS,KODEX 200
-229200.KS,KODEX 코스닥150
 360750.KS,TIGER 미국S&P500
 133690.KS,TIGER 미국나스닥100
 280930.KS,KODEX 미국러셀2000(H)
 195970.KS,PLUS 선진국MSCI(합성 H)
 195980.KS,PLUS 신흥국MSCI(합성 H)
-181480.KS,ACE 미국다우존스리츠 (합성H)
+181480.KS,ACE 미국부동산리츠(합성H)
 276000.KS,TIGER 글로벌자원생산기업(합성 H)
-304660.KS,KODEX 미국채울트라30년 선물(H)
-305080.KS,TIGER 미국채10년선물
+476760.KS,ACE 미국30년국채액티브
 411060.KS,ACE KRX금현물
-329750.KS,TIGER 미국달러단기채권액티브
-461490.KS,RISE 글로벌자산배분액티브
-
-381170.KS,TIGER 미국테크TOP10 INDXX
-487230.KS,KODEX 미국AI전력핵심인프라
+069500.KS,KODEX 200
+229200.KS,KODEX 코스닥150
+241180.KS,TIGER 일본니케이225
+101280.KS,KODEX 일본TOPIX100
+453810.KS,KODEX 인도Nifty50
+283580.KS,KODEX 차이나CSI300
 371160.KS,TIGER 차이나항셍테크
-147970.KS,TIGER 모멘텀
+305080.KS,TIGER 미국채10년선물
+329750.KS,TIGER 미국달러단기채권액티브
+488770.KS,KODEX 머니마켓액티브
+
 
 
