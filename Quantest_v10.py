@@ -884,7 +884,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     3. 변동성 Z-Score 필터 (과변동성 자산 제외)
     4. 샤프비율 랭킹 = 모멘텀 / 변동성
     5. 카테고리 캡 적용 후 Top N 선정
-    6. 약세 국면: 방어 자산 중 모멘텀 1위 자산에 100% 집중
+    6. 약세 국면: 방어 자산 중 모멘텀 Top N 자산에 분산 투자 (수정됨)
 
     Returns:
         (target_weights DataFrame, investment_mode Series, phase_scores_log dict)
@@ -897,6 +897,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
 
     params = config['portfolio_params']
     top_n = params.get('top_n_aggressive', 4)
+    top_n_def = params.get('top_n_defensive', 1)  # [추가] 사이드바의 방어 자산 개수 가져오기
 
     canary_tickers = [t for t in config['tickers']['CANARY'] if t in successful_tickers]
     aggressive_assets = [t for t in config['tickers']['AGGRESSIVE'] if t in successful_tickers]
@@ -908,7 +909,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     phase_scores_log = {}  # 국면별 점수 로그 (시각화용)
 
     def get_vol(ticker, date):
-        """연율화 변동성(90일 기준) 계산 헬퍼"""
+        """연율화 변동성(기준) 계산 헬퍼"""
         price_hist = prices[ticker].loc[:date]
         if len(price_hist) < vol_window + 1:
             return np.nan
@@ -923,7 +924,7 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     for date in rebal_dates:
         phase = market_phase_series.get(date, '약세')
 
-        # ── 약세 국면: 방어 자산 중 모멘텀 1위 100% 집중 ──────────────────
+        # ── 약세 국면: 방어 자산 중 모멘텀 Top N 선정하여 분산 투자 ──────────
         if phase == '약세':
             investment_mode[date] = '약세 (Defensive)'
             mom_all = calculate_acore_momentum(date, prices, config, '약세')  # 한 번만 계산
@@ -938,16 +939,29 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
                 def_scores[ticker] = mom_score
 
             if def_scores:
-                best_def = max(def_scores, key=def_scores.get)
-                target_weights.loc[date, best_def] = 1.0
-                phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': [best_def]}
+                # [수정] 점수 순으로 정렬하여 상위 Top N개 추출
+                sorted_def = sorted(def_scores.items(), key=lambda x: x[1], reverse=True)[:top_n_def]
+                selected_def = [t for t, _ in sorted_def]
+                
+                weight_per = 1.0 / len(selected_def)
+                for asset in selected_def:
+                    target_weights.loc[date, asset] = weight_per
+                
+                phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': selected_def}
             else:
-                # 방어 자산도 모멘텀 양수인 것이 없으면 모든 방어 자산 중 최고 모멘텀으로 fallback
+                # 방어 자산도 모멘텀 양수인 것이 없으면 모든 방어 자산 중 최고 모멘텀 Top N으로 fallback
                 if defensive_assets:
                     all_def_scores = {t: mom_all.get(t, -np.inf) if hasattr(mom_all, 'get') else (mom_all[t] if t in mom_all.index else -np.inf) for t in defensive_assets}
-                    best_fallback = max(all_def_scores, key=all_def_scores.get)
-                    target_weights.loc[date, best_fallback] = 1.0
-                    phase_scores_log[date] = {'phase': phase, 'scores': all_def_scores, 'selected': [best_fallback]}
+                    
+                    # [수정] 차선책(fallback)인 경우에도 Top N 분산 투자 적용
+                    sorted_fallback = sorted(all_def_scores.items(), key=lambda x: x[1], reverse=True)[:top_n_def]
+                    selected_fallback = [t for t, _ in sorted_fallback]
+                    
+                    weight_per = 1.0 / len(selected_fallback)
+                    for asset in selected_fallback:
+                        target_weights.loc[date, asset] = weight_per
+                        
+                    phase_scores_log[date] = {'phase': phase, 'scores': all_def_scores, 'selected': selected_fallback}
             continue
 
         # ── 강세/중립 국면 ─────────────────────────────────────────────────
