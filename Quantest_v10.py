@@ -256,9 +256,8 @@ with st.sidebar.expander("티커 관리"):
     
     current_stocks_df = load_Stock_list()
     if current_stocks_df is not None:
-        # 행 수에 맞게 높이를 동적으로 계산 (헤더 35px + 행당 35px, 최소 100px)
-        dynamic_height = max(100, 35 + len(current_stocks_df) * 35)
-        st.dataframe(current_stocks_df, height=dynamic_height, use_container_width=True)
+        # 사이드바에서는 소형(3~4행)으로 표시, fullscreen 버튼으로 전체 확인 가능
+        st.dataframe(current_stocks_df, height=150, use_container_width=True)
     else:
         st.info("Stock_list.csv 파일을 찾을 수 없습니다.")
 
@@ -457,18 +456,21 @@ if strategy_mode == 'A-Core (신규)':
         )
     
     with st.sidebar.expander("🗂️ A-Core 자산 카테고리 설정"):
-        st.caption("공격 자산 각각의 카테고리를 선택하세요. 카테고리 캡은 동일 카테고리 내 최대 편입 수를 제한합니다.")
+        st.caption("각 카테고리에 공격 자산을 배치하세요. 지정되지 않은 자산은 '기타'로 분류됩니다.")
 
-        # 선택된 공격 자산 목록 가져오기
+        # 선택된 공격 자산 티커 목록
         _agg_tickers_for_cat = [s.split(' - ')[0] for s in st.session_state.get('selected_aggressive', [])]
 
-        CATEGORY_OPTIONS = ['주식', '대체', '채권', '리츠', '안전자산', '기타']
+        CATEGORY_OPTIONS = ['주식', '대체', '채권', '리츠', '안전자산']
+        _CAT_COLORS = {
+            '주식':    '#1f77b4',
+            '대체':    '#ff7f0e',
+            '채권':    '#2ca02c',
+            '리츠':    '#9467bd',
+            '안전자산': '#d62728',
+        }
 
-        # session_state에 카테고리 매핑 딕셔너리 초기화
-        if 'acore_cat_map_state' not in st.session_state:
-            st.session_state.acore_cat_map_state = {}
-
-        # 기본 카테고리 자동 추론 (처음 보는 티커에 대해 휴리스틱 적용)
+        # 기본 자동 추론 힌트
         _DEFAULT_CAT_HINTS = {
             'SPY': '주식', 'QQQ': '주식', 'IWM': '주식', 'EFA': '주식', 'VWO': '주식',
             'EWJ': '주식', 'INDA': '주식', 'EWZ': '주식', 'FXI': '주식',
@@ -478,64 +480,80 @@ if strategy_mode == 'A-Core (신규)':
             'BIL': '안전자산', 'SHV': '안전자산', 'SHY': '안전자산',
         }
 
+        # session_state에서 카테고리별 선택 목록 초기화
+        # 구조: {'주식': ['SPY','QQQ'], '대체': ['GLD'], ...}
+        if 'acore_cat_buckets' not in st.session_state:
+            st.session_state.acore_cat_buckets = {cat: [] for cat in CATEGORY_OPTIONS}
+
+        # 공격 자산이 없으면 안내
         if not _agg_tickers_for_cat:
             st.info("공격 자산을 먼저 선택하면 카테고리를 지정할 수 있습니다.")
-        else:
-            # 카테고리별 컬러 뱃지 정의
-            _CAT_COLORS = {
-                '주식':    '#1f77b4',
-                '대체':    '#ff7f0e',
-                '채권':    '#2ca02c',
-                '리츠':    '#9467bd',
-                '안전자산': '#d62728',
-                '기타':    '#7f7f7f',
-            }
-
-            # 각 티커별로 selectbox 렌더링
             acore_category_map = {}
+        else:
+            # 공격 자산 display 레이블 생성 (티커 → 티커 + 이름)
+            _tk_labels = {}
             for tk in _agg_tickers_for_cat:
-                # 기본값: 이미 선택한 값 → 자동 추론 → '기타'
-                default_cat = st.session_state.acore_cat_map_state.get(
-                    tk,
-                    _DEFAULT_CAT_HINTS.get(tk.upper(), '기타')
-                )
-                default_idx = CATEGORY_OPTIONS.index(default_cat) if default_cat in CATEGORY_OPTIONS else len(CATEGORY_OPTIONS) - 1
-
-                # 티커 표시명 (이름 있으면 함께 표시)
-                _tk_label = tk
+                label = tk
                 if etf_df is not None:
-                    _m = etf_df[etf_df['Ticker'] == tk]
-                    if not _m.empty:
-                        _tk_label = f"{tk} ({_m.iloc[0]['Name'][:12]}…)" if len(_m.iloc[0]['Name']) > 12 else f"{tk} ({_m.iloc[0]['Name']})"
+                    m = etf_df[etf_df['Ticker'] == tk]
+                    if not m.empty:
+                        nm = m.iloc[0]['Name']
+                        label = f"{tk} — {nm[:14]}…" if len(nm) > 14 else f"{tk} — {nm}"
+                _tk_labels[tk] = label
 
-                chosen = st.selectbox(
-                    _tk_label,
-                    options=CATEGORY_OPTIONS,
-                    index=default_idx,
-                    key=f'acore_cat_{tk}'
-                )
-                st.session_state.acore_cat_map_state[tk] = chosen
-                acore_category_map[tk] = chosen
+            # 카테고리별 multiselect — 각 바구니에 자산을 드래그·클릭으로 담기
+            # 이미 다른 카테고리에 담긴 자산은 해당 카테고리의 options에서 제외
+            _all_labels = list(_tk_labels.values())
+            _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
-            # 현재 매핑 요약 표시
-            st.divider()
-            st.caption("📋 현재 카테고리 요약")
-            from collections import defaultdict as _dd
-            _grouped = _dd(list)
-            for tk, cat in acore_category_map.items():
-                _grouped[cat].append(tk)
-            for cat, tks in sorted(_grouped.items()):
+            # 초기 기본값 계산 (처음 열 때 힌트 기반으로 배치)
+            def _build_default(cat):
+                saved = st.session_state.acore_cat_buckets.get(cat, [])
+                if saved:
+                    return [_tk_labels[t] for t in saved if t in _tk_labels]
+                # 힌트 기반 기본값
+                return [_tk_labels[t] for t in _agg_tickers_for_cat
+                        if _DEFAULT_CAT_HINTS.get(t.upper(), '기타') == cat and t in _tk_labels]
+
+            acore_category_map = {}
+            _assigned = set()
+
+            for cat in CATEGORY_OPTIONS:
                 color = _CAT_COLORS.get(cat, '#888')
-                tks_str = ', '.join(tks)
                 st.markdown(
-                    f'<span style="background:{color};color:white;padding:2px 7px;border-radius:10px;font-size:0.78em;font-weight:bold;">{cat}</span> '
-                    f'<span style="font-size:0.85em;">{tks_str}</span>',
+                    f'<span style="background:{color};color:white;padding:2px 8px;'
+                    f'border-radius:10px;font-size:0.8em;font-weight:bold;">{cat}</span>',
                     unsafe_allow_html=True
                 )
-    
-    # 공격 자산이 없거나 expander 밖에서도 acore_category_map이 정의되도록 보장
-    if '_agg_tickers_for_cat' not in dir() or not _agg_tickers_for_cat:
-        acore_category_map = st.session_state.get('acore_cat_map_state', {})
+                # 이미 다른 카테고리에 배치된 자산은 이 카테고리의 선택지에서 제외
+                _available = [lb for lb in _all_labels if _label_to_tk[lb] not in _assigned]
+
+                _prev_default = _build_default(cat)
+                # 이전 기본값 중 현재 available한 것만 남기기
+                _valid_default = [lb for lb in _prev_default if lb in _available]
+
+                chosen_labels = st.multiselect(
+                    f"",
+                    options=_available,
+                    default=_valid_default,
+                    key=f'acore_bucket_{cat}',
+                    label_visibility='collapsed'
+                )
+                chosen_tickers = [_label_to_tk[lb] for lb in chosen_labels]
+                st.session_state.acore_cat_buckets[cat] = chosen_tickers
+                _assigned.update(chosen_tickers)
+                for tk in chosen_tickers:
+                    acore_category_map[tk] = cat
+
+            # 배정 안 된 자산은 '기타'로 자동 분류
+            for tk in _agg_tickers_for_cat:
+                if tk not in acore_category_map:
+                    acore_category_map[tk] = '기타'
+
+            # 미배정 자산 안내
+            _unassigned = [tk for tk in _agg_tickers_for_cat if acore_category_map.get(tk) == '기타']
+            if _unassigned:
+                st.caption(f"⚠️ '기타'로 분류: {', '.join(_unassigned)}")
     
     acore_config = {
         'sp500_ticker': sp500_ticker_acore,
@@ -1604,15 +1622,13 @@ with tab1:
         
         st.header("2. 시그널 모멘텀")
         
-        # ── [A-Core 신규] 시장 국면 판단 결과 표시 ─────────────────────────
+        # ── [A-Core 신규] 시장 국면 통계 카드 (차트와 분리하여 먼저 표시) ───
         if config.get('strategy_mode') == 'A-Core (신규)':
             market_phase_series = results.get('market_phase_series')
-            phase_scores_log = results.get('phase_scores_log')
+            phase_scores_log    = results.get('phase_scores_log')
 
             if market_phase_series is not None and not market_phase_series.empty:
                 st.subheader("🌡️ A-Core 시장 국면 판단 결과")
-
-                # 국면 통계
                 phase_counts = market_phase_series.value_counts()
                 total = len(market_phase_series)
                 col_bull, col_neut, col_bear = st.columns(3)
@@ -1626,21 +1642,6 @@ with tab1:
                     cnt = phase_counts.get('약세', 0)
                     st.metric("🔴 약세 국면 (카나리아)", f"{cnt}회", f"{cnt/total:.1%}")
 
-                # 국면 시계열 차트
-                phase_numeric = market_phase_series.map({'강세': 2, '중립': 1, '약세': 0})
-                fig_phase, ax_phase = plt.subplots(figsize=(10, 2.5))
-                colors_map = {2: 'green', 1: 'gold', 0: 'red'}
-                for i in range(len(phase_numeric) - 1):
-                    d0, d1 = phase_numeric.index[i], phase_numeric.index[i+1]
-                    val = phase_numeric.iloc[i]
-                    c = colors_map.get(val, 'grey')
-                    ax_phase.axvspan(d0, d1, facecolor=c, alpha=0.4)
-                ax_phase.set_yticks([0, 1, 2])
-                ax_phase.set_yticklabels(['약세', '중립', '강세'], fontsize=10)
-                ax_phase.set_title('시장 국면 추이 (A-Core)', fontsize=13)
-                ax_phase.set_xlabel('Date'); ax_phase.grid(axis='x', linestyle='--', linewidth=0.4)
-                st.pyplot(fig_phase)
-
                 # 샤프비율 점수 로그 상세 보기
                 if phase_scores_log:
                     with st.expander("📊 A-Core 샤프비율 랭킹 상세 (최근 12회)"):
@@ -1648,8 +1649,8 @@ with tab1:
                         for d in recent_dates:
                             log = phase_scores_log[d]
                             phase_str = log.get('phase', '-')
-                            scores = log.get('scores', {})
-                            selected = log.get('selected', [])
+                            scores    = log.get('scores', {})
+                            selected  = log.get('selected', [])
                             if not scores:
                                 st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 편입 자산 없음 (현금)")
                                 continue
@@ -1660,103 +1661,132 @@ with tab1:
                                     m = etf_df[etf_df['Ticker'] == tk]
                                     if not m.empty:
                                         name = f"{tk} - {m.iloc[0]['Name']}"
-                                rows.append({
-                                    '자산': name,
-                                    '샤프비율 점수': f"{sc:.4f}",
-                                    '선택': '✅' if tk in selected else ''
-                                })
+                                rows.append({'자산': name, '샤프비율 점수': f"{sc:.4f}",
+                                             '선택': '✅' if tk in selected else ''})
                             df_log = pd.DataFrame(rows)
                             st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '없음'}")
                             st.dataframe(df_log.set_index('자산'), use_container_width=True)
 
             st.divider()
-        # --- 👇 [교체] 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 (백테스트 기준 적용) ---
+
+        # --- 카나리아 모멘텀 vs 벤치마크 가격 비교 그래프 ---
         st.subheader("📊 카나리아 모멘텀 추이 vs. 벤치마크 가격")
-        
-        # 1. 필요한 데이터 가져오기
-        prices = results.get('prices')
-        config = results.get('config')
-        
-        if prices is None or config is None:
+
+        # 파스텔 톤 팔레트 정의
+        _PASTEL = {
+            '강세': '#c8f0c8',   # 연초록
+            '중립': '#fff9c4',   # 연노랑
+            '약세': '#ffd6d6',   # 연분홍
+            'risk_on':  '#d4edda',  # HAA Aggressive
+            'risk_off': '#fff3cd',  # HAA Defensive
+        }
+
+        prices_for_chart = results.get('prices')
+        config_for_chart = results.get('config')
+
+        if prices_for_chart is None or config_for_chart is None:
             st.warning("그래프를 그리는데 필요한 데이터(가격, 설정)가 결과에 포함되지 않았습니다.")
         else:
-            # 2. 그래프용 전체 기간 모멘텀 계산 (헬퍼 함수 사용)
-            full_momentum_scores = calculate_full_momentum(prices, config)
-        
-            # 3. 사용자의 '백테스트 기준'과 '리밸런싱 기준일'에 따라 데이터 가공
-            backtest_type = config.get('backtest_type', '일별')
-            rebalance_day = config.get('rebalance_day', '월말') # '월초'/'월말' 설정 가져오기
-        
-            if backtest_type == '월별':
-                if rebalance_day == '월초':
-                    # 월초 기준: 월 시작(Month Start)의 첫번째 데이터로 리샘플링
+            full_momentum_scores = calculate_full_momentum(prices_for_chart, config_for_chart)
+
+            _bt_type    = config_for_chart.get('backtest_type', '일별')
+            _rebal_day  = config_for_chart.get('rebalance_day', '월말')
+
+            if _bt_type == '월별':
+                if _rebal_day == '월초':
                     display_momentum = full_momentum_scores.resample('MS').first()
-                    display_prices = prices.resample('MS').first()
-                    #st.caption("월별 백테스트 기준: '월초' 설정이 적용되어 표시됩니다.")
-                else: # '월말'
-                    # 월말 기준: 월 끝(Month End)의 마지막 데이터로 리샘플링
-                    display_momentum = full_momentum_scores.resample('M').last()
-                    display_prices = prices.resample('M').last()
-                    #st.caption("월별 백테스트 기준: '월말' 설정이 적용되어 표시됩니다.")
-            else: # '일별'
+                    display_prices   = prices_for_chart.resample('MS').first()
+                else:
+                    # pandas 2.2+: 'M' → 'ME'
+                    display_momentum = full_momentum_scores.resample('ME').last()
+                    display_prices   = prices_for_chart.resample('ME').last()
+            else:
                 display_momentum = full_momentum_scores
-                display_prices = prices
-                #st.caption("일별 백테스트 기준: 일별 데이터로 표시됩니다.")
-        
-            # 4. 표시할 데이터 시리즈 추출
-            canary_tickers = config['tickers']['CANARY']
-            benchmark_ticker = config['benchmark']
-        
-            if canary_tickers and benchmark_ticker in display_prices.columns:
-                canary_momentum = display_momentum[canary_tickers].mean(axis=1)
-                benchmark_price = display_prices[benchmark_ticker]
-        
-                # 5. 이중 축 그래프 그리기 (이하 동일)
+                display_prices   = prices_for_chart
+
+            _canary_tickers  = config_for_chart['tickers']['CANARY']
+            _benchmark_ticker = config_for_chart['benchmark']
+
+            if _canary_tickers and _benchmark_ticker in display_prices.columns:
+                canary_momentum = display_momentum[
+                    [t for t in _canary_tickers if t in display_momentum.columns]
+                ].mean(axis=1)
+                benchmark_price = display_prices[_benchmark_ticker]
+
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
                 ax_price = ax_mom.twinx()
-        
-                # 왼쪽 축: 카나리아 모멘텀
-                ax_mom.plot(canary_momentum.index, canary_momentum, 
-                            label=f'Canary Momentum ({",".join(canary_tickers)})', 
-                            color='blue', linewidth=1.0)
-                ax_mom.set_ylabel('카나리아 모멘텀 점수', fontsize=12)
-                ax_mom.tick_params(axis='y')
-        
-                # 오른쪽 축: 벤치마크 가격
-                ax_price.plot(benchmark_price.index, benchmark_price, 
-                              label=f'Benchmark Price ({benchmark_ticker})', 
-                              color='grey', linewidth=1.0)
-                ax_price.set_ylabel(f'{benchmark_ticker} 가격', fontsize=12)
-                ax_price.tick_params(axis='y')
 
-                # --- [추가] 카나리아 모멘텀이 0 이상인 구간에 배경 음영 추가 ---
-                # 1. 모멘텀이 0 이상인 구간을 True, 아니면 False로 표시
-                is_positive = canary_momentum >= 0
-                # 2. True인 구간들의 시작과 끝을 찾아 axvspan으로 배경색을 칠함
-                start_date = None
-                for i in range(len(is_positive)):
-                    # 현재 시점에 0 이상이고, 이전 시점에는 0 미만이었거나 첫 시작이면 -> 상승 구간 시작
-                    if is_positive[i] and (i == 0 or not is_positive[i-1]):
-                        start_date = canary_momentum.index[i]
-                    # 현재 시점에 0 미만이고, 이전 시점에 0 이상이었으면 -> 상승 구간 끝
-                    elif not is_positive[i] and (i > 0 and is_positive[i-1]) and start_date:
-                        end_date = canary_momentum.index[i]
-                        ax_mom.axvspan(start_date, end_date, facecolor='lightgreen', alpha=0.3)
-                        start_date = None
-                # 마지막까지 상승 구간이 이어졌을 경우 처리
-                if start_date:
-                    ax_mom.axvspan(start_date, canary_momentum.index[-1], facecolor='lightgreen', alpha=0.3)
-                # --- 추가 로직 끝 ---   
-        
-                ax_mom.axhline(0, color='red', linestyle=':', linewidth=1.0)
+                # ── 배경 국면/모멘텀 음영 ────────────────────────────────────
+                is_acore = config_for_chart.get('strategy_mode') == 'A-Core (신규)'
+                _market_phase_s = results.get('market_phase_series')
+
+                if is_acore and _market_phase_s is not None and not _market_phase_s.empty:
+                    # A-Core: 3단계 국면 배경 (파스텔)
+                    _phase_changes = _market_phase_s.loc[
+                        _market_phase_s.shift(1) != _market_phase_s
+                    ].index.tolist()
+                    if _market_phase_s.index[0] not in _phase_changes:
+                        _phase_changes.insert(0, _market_phase_s.index[0])
+                    for _pi in range(len(_phase_changes)):
+                        _ps = _phase_changes[_pi]
+                        _pe = _phase_changes[_pi+1] if _pi+1 < len(_phase_changes) else canary_momentum.index[-1]
+                        _ph = _market_phase_s.loc[_ps]
+                        _pc = _PASTEL.get(_ph, '#eeeeee')
+                        ax_mom.axvspan(_ps, _pe, facecolor=_pc, alpha=0.6, zorder=0)
+                else:
+                    # HAA: 카나리아 양/음 구간 배경 (파스텔)
+                    is_positive = canary_momentum >= 0
+                    _span_start = None
+                    for _i in range(len(is_positive)):
+                        if is_positive.iloc[_i] and (_i == 0 or not is_positive.iloc[_i-1]):
+                            _span_start = canary_momentum.index[_i]
+                        elif not is_positive.iloc[_i] and _i > 0 and is_positive.iloc[_i-1] and _span_start:
+                            ax_mom.axvspan(_span_start, canary_momentum.index[_i],
+                                           facecolor=_PASTEL['risk_on'], alpha=0.6, zorder=0)
+                            _span_start = None
+                    if _span_start:
+                        ax_mom.axvspan(_span_start, canary_momentum.index[-1],
+                                       facecolor=_PASTEL['risk_on'], alpha=0.6, zorder=0)
+
+                # ── 카나리아 모멘텀 라인 ─────────────────────────────────────
+                ax_mom.plot(canary_momentum.index, canary_momentum,
+                            label=f'Canary Momentum ({", ".join(_canary_tickers)})',
+                            color='steelblue', linewidth=1.5, zorder=3)
+                ax_mom.axhline(0, color='crimson', linestyle=':', linewidth=1.2, zorder=2)
+                ax_mom.set_ylabel('카나리아 모멘텀 점수', fontsize=12)
+                ax_mom.yaxis.set_major_formatter(
+                    mtick.FuncFormatter(lambda y, _: f'{y:.1%}')
+                )
+
+                # ── 벤치마크 가격 라인 ───────────────────────────────────────
+                ax_price.plot(benchmark_price.index, benchmark_price,
+                              label=f'Benchmark Price ({_benchmark_ticker})',
+                              color='dimgray', linewidth=1.0, alpha=0.8, zorder=2)
+                ax_price.set_ylabel(f'{_benchmark_ticker} 가격', fontsize=12)
+
+                # ── 범례 통합 ────────────────────────────────────────────────
+                lines1, labels1 = ax_mom.get_legend_handles_labels()
+                lines2, labels2 = ax_price.get_legend_handles_labels()
+
+                if is_acore:
+                    legend_patches = [
+                        Patch(facecolor=_PASTEL['강세'],  label='강세 국면'),
+                        Patch(facecolor=_PASTEL['중립'],  label='중립 국면'),
+                        Patch(facecolor=_PASTEL['약세'],  label='약세 국면'),
+                    ]
+                else:
+                    legend_patches = [
+                        Patch(facecolor=_PASTEL['risk_on'], label='Risk-On (카나리아 양수)'),
+                    ]
+
+                ax_mom.legend(lines1 + lines2 + legend_patches,
+                              labels1 + labels2 + [p.get_label() for p in legend_patches],
+                              loc='upper left', fontsize=9)
+
                 ax_mom.set_title('카나리아 모멘텀 vs. 벤치마크 가격', fontsize=16)
                 ax_mom.set_xlabel('Date', fontsize=12)
-                ax_mom.grid(True, which="both", ls="--", linewidth=0.5)
-        
-                lines, labels = ax_mom.get_legend_handles_labels()
-                lines2, labels2 = ax_price.get_legend_handles_labels()
-                ax_mom.legend(lines + lines2, labels + labels2, loc='upper left')
-                
+                ax_mom.grid(True, which='both', ls='--', linewidth=0.4, alpha=0.6)
+                fig_mom.tight_layout()
                 st.pyplot(fig_mom)
             else:
                 st.warning("카나리아 또는 벤치마크 자산 데이터를 찾을 수 없습니다.")
