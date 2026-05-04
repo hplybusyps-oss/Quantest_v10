@@ -1877,7 +1877,7 @@ with tab1:
                                     m = etf_df[etf_df['Ticker'] == tk]
                                     if not m.empty:
                                         name = f"{tk} - {m.iloc[0]['Name']}"
-                                rows.append({'자산': name, '샤프비율 점수': f"{sc:.4f}",
+                                rows.append({'자산': name, '샤프비율 점수': f"{sc:.2%}",
                                              '선택': '✅' if tk in selected else ''})
                             df_log = pd.DataFrame(rows)
                             st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '없음'}")
@@ -2082,22 +2082,30 @@ with tab1:
                     y='Momentum Score',
                     color='Name',
                     title='구성종목 모멘텀 점수 추이',
-                    labels={'Date': '날짜', 'Momentum Score': '모멘텀 점수 (%)', 'Name': '종목명'},
+                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '종목명'},
                     hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
                     custom_data=['Ticker']
                 )
-                # 4. 툴팁(hovertemplate) 서식과 순서를 직접 지정
+                
+                # 4. 툴팁(hovertemplate) 서식 지정
                 fig_interactive.update_traces(
                     hovertemplate=(
-                        "<b>%{hovertext}</b><br><br>" +
-                        "티커: %{customdata[0]}<br>" +
-                        "모멘텀 점수: %{y:.2%}<br>" +
-                        "날짜: %{x|%Y-%m-%d}" +
-                        "<extra></extra>"
+                        "<b>%{hovertext}</b><br><br>" + 
+                        "티커: %{customdata[0]}<br>" +     
+                        "모멘텀 점수: %{y:.3f}<br>" +      
+                        "날짜: %{x|%Y-%m-%d}" +            
+                        "<extra></extra>"                
                     )
                 )
 
-                
+                # --- [추가] 방어 자산(안전자산)은 그래프에서 기본적으로 선이 숨겨지도록 설정 ---
+                defensive_tickers_list = config['tickers']['DEFENSIVE']
+                for trace in fig_interactive.data:
+                    # trace.customdata의 첫 번째 항목(티커명)이 방어 자산 목록에 있는지 확인
+                    if trace.customdata is not None and trace.customdata[0][0] in defensive_tickers_list:
+                        trace.visible = 'legendonly' # 범례를 클릭해야만 선이 보이도록 설정
+                # -----------------------------------------------------------------------------
+
                 fig_interactive.add_hline(y=0, line_dash="dot", line_color="red")
                 fig_interactive.update_layout(legend_title_text='종목명')
                 
