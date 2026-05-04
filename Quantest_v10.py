@@ -459,8 +459,8 @@ if strategy_mode == 'A-Core (신규)':
     with st.sidebar.expander("📊 랭킹 & 위험관리 설정", expanded=True):
         vol_window_acore = st.number_input(
             "변동성 계산 기간 (일)",
-            min_value=20, max_value=120, value=90, step=5,
-            help="샤프비율 랭킹의 분모에 사용되는 변동성 계산 기간 (영업일 기준). 기본값 90일."
+            min_value=20, max_value=120, value=60, step=5,
+            help="샤프비율 랭킹의 분모에 사용되는 변동성 계산 기간 (영업일 기준). 기본값 60일(약 3개월)."
         )
         category_cap_acore = st.number_input(
             "카테고리 캡 (카테고리별 최대 편입 수)",
@@ -1715,19 +1715,18 @@ with tab1:
                         _pc = _PASTEL.get(_ph, '#eeeeee')
                         ax_mom.axvspan(_ps, _pe, facecolor=_pc, alpha=0.6, zorder=0)
                 else:
-                    # HAA: 카나리아 양/음 구간 배경 (파스텔)
+                    # HAA: 카나리아 양/음 구간 배경을 누적 수익 그래프와 완벽히 통일
                     is_positive = canary_momentum >= 0
-                    _span_start = None
-                    for _i in range(len(is_positive)):
-                        if is_positive.iloc[_i] and (_i == 0 or not is_positive.iloc[_i-1]):
-                            _span_start = canary_momentum.index[_i]
-                        elif not is_positive.iloc[_i] and _i > 0 and is_positive.iloc[_i-1] and _span_start:
-                            ax_mom.axvspan(_span_start, canary_momentum.index[_i],
-                                           facecolor=_PASTEL['risk_on'], alpha=0.6, zorder=0)
-                            _span_start = None
-                    if _span_start:
-                        ax_mom.axvspan(_span_start, canary_momentum.index[-1],
-                                       facecolor=_PASTEL['risk_on'], alpha=0.6, zorder=0)
+                    mode_changes = is_positive.loc[is_positive.shift(1) != is_positive].index.tolist()
+                    if is_positive.index[0] not in mode_changes: 
+                        mode_changes.insert(0, is_positive.index[0])
+                        
+                    for _i in range(len(mode_changes)):
+                        _start = mode_changes[_i]
+                        _end = mode_changes[_i+1] if _i+1 < len(mode_changes) else canary_momentum.index[-1]
+                        _is_on = is_positive.loc[_start]
+                        _color = _PASTEL['risk_on'] if _is_on else _PASTEL['risk_off']
+                        ax_mom.axvspan(_start, _end, facecolor=_color, alpha=0.6, zorder=0)
 
                 # ── 카나리아 모멘텀 라인 ─────────────────────────────────────
                 ax_mom.plot(canary_momentum.index, canary_momentum,
@@ -1756,8 +1755,10 @@ with tab1:
                         Patch(facecolor=_PASTEL['약세'],  label='약세 국면'),
                     ]
                 else:
+                    # 누적 수익 그래프와 범례 텍스트 완벽 일치
                     legend_patches = [
                         Patch(facecolor=_PASTEL['risk_on'], label='Risk-On (카나리아 양수)'),
+                        Patch(facecolor=_PASTEL['risk_off'], label='Risk-Off (방어)'),
                     ]
 
                 ax_mom.legend(lines1 + lines2 + legend_patches,
