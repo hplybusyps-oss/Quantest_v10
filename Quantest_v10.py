@@ -2375,6 +2375,9 @@ with tab2:
                 dd_series = timeseries.get('strategy_drawdown')
 
                 if dd_series is not None:
+                    # 메인 탭과 동일하게 빈 데이터(NaN)로 인한 그래프 오류를 방지합니다.
+                    dd_series = dd_series.astype(float).fillna(0)
+                    
                     ax2.plot(dd_series, label=result_name, linewidth=1.0)
                     ax2.fill_between(dd_series.index, dd_series, 0, alpha=0.1) # 하락폭 영역 음영 처리
 
