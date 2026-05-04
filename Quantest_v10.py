@@ -2041,12 +2041,12 @@ with tab1:
         col1_annual, col2_annual = st.columns([1, 2])
         returns_freq = config['backtest_type'].split(' ')[0]
         if returns_freq == '일별':
-            monthly_pf_returns_for_annual = portfolio_returns.resample('M').apply(lambda x: (1 + x).prod() - 1)
-            monthly_bm_returns_for_annual = benchmark_returns.resample('M').apply(lambda x: (1 + x).prod() - 1)
+            monthly_pf_returns_for_annual = portfolio_returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
+            monthly_bm_returns_for_annual = benchmark_returns.resample('ME').apply(lambda x: (1 + x).prod() - 1)
         else:
             monthly_pf_returns_for_annual = portfolio_returns; monthly_bm_returns_for_annual = benchmark_returns
-        annual_returns = monthly_pf_returns_for_annual.resample('A').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Strategy")
-        bm_annual_returns = monthly_bm_returns_for_annual.resample('A').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Benchmark")
+        annual_returns = monthly_pf_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Strategy")
+        bm_annual_returns = monthly_bm_returns_for_annual.resample('YE').apply(lambda x: (1 + x).prod() - 1).to_frame(name="Benchmark")
         annual_df = pd.concat([annual_returns, bm_annual_returns], axis=1)
         annual_df.index = annual_df.index.year
         annual_df.index = annual_df.index.astype(str)
