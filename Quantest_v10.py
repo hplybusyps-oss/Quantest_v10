@@ -1877,7 +1877,7 @@ with tab1:
                                     m = etf_df[etf_df['Ticker'] == tk]
                                     if not m.empty:
                                         name = f"{tk} - {m.iloc[0]['Name']}"
-                                rows.append({'자산': name, '샤프비율 점수': f"{sc:.2%}",
+                                rows.append({'자산': name, '샤프비율 점수': f"{sc:.3f}",
                                              '선택': '✅' if tk in selected else ''})
                             df_log = pd.DataFrame(rows)
                             st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '없음'}")
@@ -2010,13 +2010,16 @@ with tab1:
                 st.warning("카나리아 또는 벤치마크 자산 데이터를 찾을 수 없습니다.")
 
         # --- [수정] 구성종목 모멘텀 점수 (중복 컬럼 에러 및 KeyError 방지) ---
-        st.subheader("📊 구성종목 모멘텀 점수")
+        # 전략 종류에 따라 라벨 텍스트(샤프비율 vs 모멘텀)를 동적으로 변경
+        is_acore_strat = config.get('strategy_mode') == 'A-Core'
+        score_label = '샤프비율 점수' if is_acore_strat else '모멘텀 점수'
+        
+        st.subheader(f"📊 구성종목 {score_label}")
 
         momentum_scores = results.get('momentum_scores')
         config = results.get('config')
 
         if momentum_scores is not None and config is not None:
-            # --- ▼▼▼ 중복 티커 제거 로직 추가 ▼▼▼ ---
             # 1. 공격/방어 자산 목록을 가져옵니다.
             aggressive_tickers = config['tickers']['AGGRESSIVE']
             defensive_tickers = config['tickers']['DEFENSIVE']
@@ -2027,13 +2030,12 @@ with tab1:
             
             # 3. 모멘텀 점수 데이터에 실제 존재하는 티커만 필터링합니다.
             assets_to_show = [t for t in unique_assets if t in momentum_scores.columns]
-            # --- ▲▲▲ 수정 끝 ▲▲▲ ---
             
             if assets_to_show:
                 scores_to_display = momentum_scores[assets_to_show]
 
                 # 데이터 테이블 (기존과 동일)
-                with st.expander("모멘텀 점수 상세 데이터 보기 (전체 기간)"):
+                with st.expander(f"{score_label} 상세 데이터 보기 (전체 기간)"):
                     #end_date = scores_to_display.index.max()
                     #start_date = end_date - pd.DateOffset(months=12)
                     #recent_scores = scores_to_display[scores_to_display.index >= start_date]
@@ -2041,7 +2043,6 @@ with tab1:
                     sorted_recent_scores = scores_to_display.sort_index(ascending=False)
                     
                     if not sorted_recent_scores.empty:
-                        # --- ▼▼▼ 테이블 컬럼 이름 변경 로직 추가 ▼▼▼ ---
                         df_to_display = sorted_recent_scores.copy()
                         
                         # Stock_list.csv 정보가 있을 경우, 컬럼 이름을 전체 이름으로 변경
@@ -2050,13 +2051,11 @@ with tab1:
                             ticker_to_name_map = pd.Series(etf_df.Name.values, index=etf_df.Ticker).to_dict()
                             df_to_display.rename(columns=ticker_to_name_map, inplace=True)
 
-                        # 이름이 변경된 데이터프레임을 화면에 표시
-                        st.dataframe(df_to_display.style.format("{:.2%}").background_gradient(cmap='viridis', axis=1))
-                        # --- ▲▲▲ 로직 추가 끝 ▲▲▲ ---
+                        # [수정] 3자리 소수점 일반 숫자로 포맷 변경
+                        st.dataframe(df_to_display.style.format("{:.3f}").background_gradient(cmap='viridis', axis=1))
                     else:
                         st.dataframe(sorted_recent_scores)
 
-                # --- ▼▼▼ Plotly 그래프 로직 수정 ▼▼▼ ---
                 # 1. 데이터를 'long' 형태로 변환
                 df_melted = scores_to_display.reset_index().rename(columns={'index': 'Date'})
                 df_melted = df_melted.melt(id_vars='Date', var_name='Ticker', value_name='Momentum Score')
@@ -2081,18 +2080,18 @@ with tab1:
                     x='Date',
                     y='Momentum Score',
                     color='Name',
-                    title='구성종목 모멘텀 점수 추이',
-                    labels={'Date': 'Date', 'Momentum Score': '모멘텀 점수', 'Name': '종목명'},
+                    title=f'구성종목 {score_label} 추이',
+                    labels={'Date': 'Date', 'Momentum Score': score_label, 'Name': '종목명'},
                     hover_name='Name', # 호버 툴팁의 제목을 'Name'으로 설정
                     custom_data=['Ticker']
                 )
                 
-                # 4. 툴팁(hovertemplate) 서식 지정
+                # 4. 툴팁(hovertemplate) 서식 지정 (동적 라벨 적용)
                 fig_interactive.update_traces(
                     hovertemplate=(
                         "<b>%{hovertext}</b><br><br>" + 
                         "티커: %{customdata[0]}<br>" +     
-                        "모멘텀 점수: %{y:.3f}<br>" +      
+                        f"{score_label}: %{{y:.3f}}<br>" +      
                         "날짜: %{x|%Y-%m-%d}" +            
                         "<extra></extra>"                
                     )
