@@ -1498,6 +1498,7 @@ if run_button_clicked:
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
             'max_momentum_period': max_momentum_period,
+            'prices_full': prices,  # 워밍업 기간 포함 원본 prices (카나리아 모멘텀 그래프용)
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
             'market_phase_series': market_phase_series,
@@ -1933,30 +1934,45 @@ with tab1:
         if prices_for_chart is None or config_for_chart is None:
             st.warning("그래프를 그리는데 필요한 데이터(가격, 설정)가 결과에 포함되지 않았습니다.")
         else:
-            full_momentum_scores = calculate_full_momentum(prices_for_chart, config_for_chart)
+            # 카나리아 모멘텀 계산은 워밍업 기간이 포함된 원본 prices 사용
+            # prices_full이 없으면(구버전 pkl) prices_for_chart로 폴백
+            prices_full_for_canary = results.get('prices_full', prices_for_chart)
 
             _bt_type    = config_for_chart.get('backtest_type', '일별')
             _rebal_day  = config_for_chart.get('rebalance_day', '월말')
-
-            if _bt_type == '월별':
-                if _rebal_day == '월초':
-                    display_momentum = full_momentum_scores.resample('MS').first()
-                    display_prices   = prices_for_chart.resample('MS').first()
-                else:
-                    # pandas 2.2+: 'M' → 'ME'
-                    display_momentum = full_momentum_scores.resample('ME').last()
-                    display_prices   = prices_for_chart.resample('ME').last()
-            else:
-                display_momentum = full_momentum_scores
-                display_prices   = prices_for_chart
-
             _canary_tickers  = config_for_chart['tickers']['CANARY']
             _benchmark_ticker = config_for_chart['benchmark']
 
+            # 카나리아 자산만 추출하여 워밍업 포함 원본 데이터로 모멘텀 계산
+            _valid_canary = [t for t in _canary_tickers if t in prices_full_for_canary.columns]
+            if _valid_canary:
+                canary_prices_full = prices_full_for_canary[_valid_canary]
+                canary_full_momentum_raw = calculate_full_momentum(canary_prices_full, config_for_chart)
+                # 백테스트 시작일(워밍업 제외) 이후 데이터만 그래프에 표시
+                _backtest_start = pd.to_datetime(config_for_chart['start_date'])
+                canary_full_momentum_raw = canary_full_momentum_raw[canary_full_momentum_raw.index >= _backtest_start]
+            else:
+                canary_full_momentum_raw = pd.DataFrame()
+
+            # 벤치마크 가격은 기존 prices_for_chart(백테스트 기간) 사용
+            if _bt_type == '월별':
+                if _rebal_day == '월초':
+                    display_momentum = canary_full_momentum_raw.resample('MS').first() if not canary_full_momentum_raw.empty else pd.DataFrame()
+                    display_prices   = prices_for_chart.resample('MS').first()
+                else:
+                    display_momentum = canary_full_momentum_raw.resample('ME').last() if not canary_full_momentum_raw.empty else pd.DataFrame()
+                    display_prices   = prices_for_chart.resample('ME').last()
+            else:
+                display_momentum = canary_full_momentum_raw
+                display_prices   = prices_for_chart
+
             if _canary_tickers and _benchmark_ticker in display_prices.columns:
-                canary_momentum = display_momentum[
-                    [t for t in _canary_tickers if t in display_momentum.columns]
-                ].mean(axis=1)
+                if not display_momentum.empty:
+                    canary_momentum = display_momentum[
+                        [t for t in _canary_tickers if t in display_momentum.columns]
+                    ].mean(axis=1)
+                else:
+                    canary_momentum = pd.Series(dtype=float)
                 benchmark_price = display_prices[_benchmark_ticker]
 
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
@@ -1982,9 +1998,12 @@ with tab1:
                 else:
                     # HAA: 카나리아 양/음 구간 배경을 누적 수익 그래프와 완벽히 통일
                     is_positive = canary_momentum >= 0
-                    mode_changes = is_positive.loc[is_positive.shift(1) != is_positive].index.tolist()
-                    if is_positive.index[0] not in mode_changes: 
-                        mode_changes.insert(0, is_positive.index[0])
+                    if is_positive.empty:
+                        mode_changes = []
+                    else:
+                        mode_changes = is_positive.loc[is_positive.shift(1) != is_positive].index.tolist()
+                        if is_positive.index[0] not in mode_changes: 
+                            mode_changes.insert(0, is_positive.index[0])
                         
                     for _i in range(len(mode_changes)):
                         _start = mode_changes[_i]
