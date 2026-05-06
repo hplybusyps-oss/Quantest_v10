@@ -1498,6 +1498,7 @@ if run_button_clicked:
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
             'max_momentum_period': max_momentum_period,
+            'prices_full': prices.copy(),  # 워밍업 기간 포함 원본 (카나리아 모멘텀 그래프 전용)
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
             'market_phase_series': market_phase_series,
@@ -1933,30 +1934,46 @@ with tab1:
         if prices_for_chart is None or config_for_chart is None:
             st.warning("그래프를 그리는데 필요한 데이터(가격, 설정)가 결과에 포함되지 않았습니다.")
         else:
-            full_momentum_scores = calculate_full_momentum(prices_for_chart, config_for_chart)
+            # ── 카나리아 모멘텀은 워밍업 포함 원본 prices로 계산 ──────────────
+            # prices_full: 백테스트 실행 시 저장한 워밍업 포함 전체 가격 데이터
+            # 구버전 pkl 호환: prices_full 없으면 prices_for_chart(잘린 데이터)로 폴백
+            prices_full_for_canary = results.get('prices_full', prices_for_chart)
 
             _bt_type    = config_for_chart.get('backtest_type', '일별')
             _rebal_day  = config_for_chart.get('rebalance_day', '월말')
-
-            if _bt_type == '월별':
-                if _rebal_day == '월초':
-                    display_momentum = full_momentum_scores.resample('MS').first()
-                    display_prices   = prices_for_chart.resample('MS').first()
-                else:
-                    # pandas 2.2+: 'M' → 'ME'
-                    display_momentum = full_momentum_scores.resample('ME').last()
-                    display_prices   = prices_for_chart.resample('ME').last()
-            else:
-                display_momentum = full_momentum_scores
-                display_prices   = prices_for_chart
-
             _canary_tickers  = config_for_chart['tickers']['CANARY']
             _benchmark_ticker = config_for_chart['benchmark']
+            _backtest_start = pd.to_datetime(config_for_chart['start_date'])
+
+            # 카나리아 자산의 모멘텀만 워밍업 포함 데이터로 계산
+            _valid_canary_cols = [t for t in _canary_tickers if t in prices_full_for_canary.columns]
+            if _valid_canary_cols:
+                _canary_prices_only = prices_full_for_canary[_valid_canary_cols]
+                _canary_mom_full = calculate_full_momentum(_canary_prices_only, config_for_chart)
+                # 백테스트 시작일 이후만 그래프에 표시 (워밍업 구간 제외)
+                _canary_mom_full = _canary_mom_full[_canary_mom_full.index >= _backtest_start]
+            else:
+                _canary_mom_full = pd.DataFrame(columns=_canary_tickers)
+
+            # 벤치마크 가격은 기존 prices_for_chart(백테스트 기간) 사용
+            if _bt_type == '월별':
+                if _rebal_day == '월초':
+                    display_momentum = _canary_mom_full.resample('MS').first() if not _canary_mom_full.empty else _canary_mom_full
+                    display_prices   = prices_for_chart.resample('MS').first()
+                else:
+                    display_momentum = _canary_mom_full.resample('ME').last() if not _canary_mom_full.empty else _canary_mom_full
+                    display_prices   = prices_for_chart.resample('ME').last()
+            else:
+                display_momentum = _canary_mom_full
+                display_prices   = prices_for_chart
 
             if _canary_tickers and _benchmark_ticker in display_prices.columns:
-                canary_momentum = display_momentum[
-                    [t for t in _canary_tickers if t in display_momentum.columns]
-                ].mean(axis=1)
+                if not display_momentum.empty:
+                    canary_momentum = display_momentum[
+                        [t for t in _canary_tickers if t in display_momentum.columns]
+                    ].mean(axis=1)
+                else:
+                    canary_momentum = pd.Series(0.0, index=display_prices.index)
                 benchmark_price = display_prices[_benchmark_ticker]
 
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
