@@ -1982,8 +1982,10 @@ with tab1:
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
                 ax_price = ax_mom.twinx()
 
-                # X축 범위: 백테스트 시작일 ~ 데이터 끝
-                _x_start = _backtest_start
+                # X축 범위: 모든 자산이 존재하는 첫날(prices_for_chart.index[0]) ~ 데이터 끝
+                # prices_for_chart는 backtest_start_date 이후로 필터링된 상태이므로
+                # index[0]이 곧 "모든 자산이 존재하는 날"
+                _x_start = prices_for_chart.index[0]
                 _x_end   = canary_momentum.index[-1] if not canary_momentum.empty else display_prices.index[-1]
 
                 # ── 배경 국면/모멘텀 음영 ────────────────────────────────────
