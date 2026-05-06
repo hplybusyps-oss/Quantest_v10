@@ -1958,20 +1958,23 @@ with tab1:
             # 벤치마크 가격은 기존 prices_for_chart(백테스트 기간) 사용
             if _bt_type == '월별':
                 if _rebal_day == '월초':
-                    display_momentum = _canary_mom_full.resample('MS').first() if not _canary_mom_full.empty else _canary_mom_full
                     display_prices   = prices_for_chart.resample('MS').first()
                 else:
-                    display_momentum = _canary_mom_full.resample('ME').last() if not _canary_mom_full.empty else _canary_mom_full
                     display_prices   = prices_for_chart.resample('ME').last()
             else:
-                display_momentum = _canary_mom_full
                 display_prices   = prices_for_chart
 
+            # display_prices를 백테스트 시작일 이후로 명시적 제한
+            display_prices = display_prices[display_prices.index >= _backtest_start]
+
             if _canary_tickers and _benchmark_ticker in display_prices.columns:
-                if not display_momentum.empty:
-                    canary_momentum = display_momentum[
-                        [t for t in _canary_tickers if t in display_momentum.columns]
-                    ].mean(axis=1)
+                # 카나리아 모멘텀을 display_prices의 인덱스에 맞춰 reindex
+                # → 두 시리즈의 X축 범위를 완전히 동일하게 맞춤
+                if not _canary_mom_full.empty:
+                    _canary_valid_cols = [t for t in _canary_tickers if t in _canary_mom_full.columns]
+                    _raw_canary = _canary_mom_full[_canary_valid_cols].mean(axis=1)
+                    # display_prices 인덱스 기준으로 reindex (forward-fill 후 남은 NaN은 0으로)
+                    canary_momentum = _raw_canary.reindex(display_prices.index, method='nearest').fillna(0)
                 else:
                     canary_momentum = pd.Series(0.0, index=display_prices.index)
                 benchmark_price = display_prices[_benchmark_ticker]
@@ -1979,36 +1982,41 @@ with tab1:
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
                 ax_price = ax_mom.twinx()
 
+                # X축 범위: 백테스트 시작일 ~ 데이터 끝
+                _x_start = _backtest_start
+                _x_end   = canary_momentum.index[-1] if not canary_momentum.empty else display_prices.index[-1]
+
                 # ── 배경 국면/모멘텀 음영 ────────────────────────────────────
                 is_acore = config_for_chart.get('strategy_mode') == 'A-Core'
                 _market_phase_s = results.get('market_phase_series')
 
                 if is_acore and _market_phase_s is not None and not _market_phase_s.empty:
-                    # A-Core: 3단계 국면 배경 (파스텔)
-                    _phase_changes = _market_phase_s.loc[
-                        _market_phase_s.shift(1) != _market_phase_s
+                    # A-Core: 3단계 국면 배경 — 백테스트 시작일 이후 구간만
+                    _phase_in_range = _market_phase_s[_market_phase_s.index >= _x_start]
+                    _phase_changes = _phase_in_range.loc[
+                        _phase_in_range.shift(1) != _phase_in_range
                     ].index.tolist()
-                    if _market_phase_s.index[0] not in _phase_changes:
-                        _phase_changes.insert(0, _market_phase_s.index[0])
+                    if _phase_in_range.index[0] not in _phase_changes:
+                        _phase_changes.insert(0, _phase_in_range.index[0])
                     for _pi in range(len(_phase_changes)):
-                        _ps = _phase_changes[_pi]
-                        _pe = _phase_changes[_pi+1] if _pi+1 < len(_phase_changes) else canary_momentum.index[-1]
-                        _ph = _market_phase_s.loc[_ps]
+                        _ps = max(_phase_changes[_pi], _x_start)
+                        _pe = _phase_changes[_pi+1] if _pi+1 < len(_phase_changes) else _x_end
+                        _ph = _phase_in_range.loc[_phase_changes[_pi]]
                         _pc = _PASTEL.get(_ph, '#eeeeee')
                         ax_mom.axvspan(_ps, _pe, facecolor=_pc, alpha=0.6, zorder=0)
                 else:
-                    # HAA: 카나리아 양/음 구간 배경을 누적 수익 그래프와 완벽히 통일
-                    is_positive = canary_momentum >= 0
-                    mode_changes = is_positive.loc[is_positive.shift(1) != is_positive].index.tolist()
-                    if is_positive.index[0] not in mode_changes: 
-                        mode_changes.insert(0, is_positive.index[0])
-                        
-                    for _i in range(len(mode_changes)):
-                        _start = mode_changes[_i]
-                        _end = mode_changes[_i+1] if _i+1 < len(mode_changes) else canary_momentum.index[-1]
-                        _is_on = is_positive.loc[_start]
-                        _color = _PASTEL['risk_on'] if _is_on else _PASTEL['risk_off']
-                        ax_mom.axvspan(_start, _end, facecolor=_color, alpha=0.6, zorder=0)
+                    # HAA: 카나리아 양/음 구간 배경
+                    if not canary_momentum.empty:
+                        is_positive = canary_momentum >= 0
+                        mode_changes = is_positive.loc[is_positive.shift(1) != is_positive].index.tolist()
+                        if is_positive.index[0] not in mode_changes:
+                            mode_changes.insert(0, is_positive.index[0])
+                        for _i in range(len(mode_changes)):
+                            _start = mode_changes[_i]
+                            _end = mode_changes[_i+1] if _i+1 < len(mode_changes) else _x_end
+                            _is_on = is_positive.loc[_start]
+                            _color = _PASTEL['risk_on'] if _is_on else _PASTEL['risk_off']
+                            ax_mom.axvspan(_start, _end, facecolor=_color, alpha=0.6, zorder=0)
 
                 # ── 카나리아 모멘텀 라인 ─────────────────────────────────────
                 ax_mom.plot(canary_momentum.index, canary_momentum,
@@ -2049,6 +2057,7 @@ with tab1:
 
                 ax_mom.set_title('카나리아 모멘텀 vs. 벤치마크 가격', fontsize=16)
                 ax_mom.set_xlabel('날짜', fontsize=12)
+                ax_mom.set_xlim(_x_start, _x_end)   # X축 범위를 백테스트 시작일로 고정
                 ax_mom.grid(True, which='both', ls='--', linewidth=0.4, alpha=0.6)
                 fig_mom.tight_layout()
                 st.pyplot(fig_mom)
