@@ -1943,29 +1943,31 @@ with tab1:
             _rebal_day  = config_for_chart.get('rebalance_day', '월말')
             _canary_tickers  = config_for_chart['tickers']['CANARY']
             _benchmark_ticker = config_for_chart['benchmark']
-            _backtest_start = pd.to_datetime(config_for_chart['start_date'])
+            # X축 시작 기준: prices_for_chart.index[0] = "모든 자산이 존재하는 첫날"
+            # (culprit 티커가 있으면 사용자 설정 시작일보다 늦을 수 있음)
+            _x_start = prices_for_chart.index[0]
 
             # 카나리아 자산의 모멘텀만 워밍업 포함 데이터로 계산
+            # 필터 기준을 _x_start로 맞춰야 카나리아 선이 X축 시작부터 표시됨
             _valid_canary_cols = [t for t in _canary_tickers if t in prices_full_for_canary.columns]
             if _valid_canary_cols:
                 _canary_prices_only = prices_full_for_canary[_valid_canary_cols]
                 _canary_mom_full = calculate_full_momentum(_canary_prices_only, config_for_chart)
-                # 백테스트 시작일 이후만 그래프에 표시 (워밍업 구간 제외)
-                _canary_mom_full = _canary_mom_full[_canary_mom_full.index >= _backtest_start]
+                # _x_start(모든 자산 존재 첫날) 이후만 그래프에 표시
+                _canary_mom_full = _canary_mom_full[_canary_mom_full.index >= _x_start]
             else:
                 _canary_mom_full = pd.DataFrame(columns=_canary_tickers)
 
-            # 벤치마크 가격은 기존 prices_for_chart(백테스트 기간) 사용
+            # 벤치마크 가격도 동일하게 _x_start 이후로 제한
             if _bt_type == '월별':
                 if _rebal_day == '월초':
-                    display_prices   = prices_for_chart.resample('MS').first()
+                    display_prices = prices_for_chart.resample('MS').first()
                 else:
-                    display_prices   = prices_for_chart.resample('ME').last()
+                    display_prices = prices_for_chart.resample('ME').last()
             else:
-                display_prices   = prices_for_chart
+                display_prices = prices_for_chart
 
-            # display_prices를 백테스트 시작일 이후로 명시적 제한
-            display_prices = display_prices[display_prices.index >= _backtest_start]
+            display_prices = display_prices[display_prices.index >= _x_start]
 
             if _canary_tickers and _benchmark_ticker in display_prices.columns:
                 # 카나리아 모멘텀을 display_prices의 인덱스에 맞춰 reindex
@@ -1982,11 +1984,8 @@ with tab1:
                 fig_mom, ax_mom = plt.subplots(figsize=(10, 5))
                 ax_price = ax_mom.twinx()
 
-                # X축 범위: 모든 자산이 존재하는 첫날(prices_for_chart.index[0]) ~ 데이터 끝
-                # prices_for_chart는 backtest_start_date 이후로 필터링된 상태이므로
-                # index[0]이 곧 "모든 자산이 존재하는 날"
-                _x_start = prices_for_chart.index[0]
-                _x_end   = canary_momentum.index[-1] if not canary_momentum.empty else display_prices.index[-1]
+                # _x_start는 위에서 이미 정의됨 (prices_for_chart.index[0])
+                _x_end = canary_momentum.index[-1] if not canary_momentum.empty else display_prices.index[-1]
 
                 # ── 배경 국면/모멘텀 음영 ────────────────────────────────────
                 is_acore = config_for_chart.get('strategy_mode') == 'A-Core'
