@@ -740,18 +740,12 @@ def get_price_data(tickers, start, end, user_start_date):
 
         # yfinance MultiIndex 처리: 단일 티커도 MultiIndex를 반환할 수 있음
         if isinstance(raw_data.columns, pd.MultiIndex):
-            # 1. 모든 종목의 '종가(Close)'를 기본 데이터로 먼저 깔아둡니다. (지수 누락 완벽 차단)
-            if 'Close' in raw_data.columns.get_level_values(0):
-                prices = raw_data['Close'].copy()
-            else:
-                prices = pd.DataFrame()
-                
-            # 2. '수정 종가(Adj Close)'가 존재하는 종목만 정상 데이터인지 확인 후 덮어씌웁니다.
+            # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
             if 'Adj Close' in raw_data.columns.get_level_values(0):
-                adj_closes = raw_data['Adj Close']
-                for col in adj_closes.columns:
-                    if not adj_closes[col].isnull().all():
-                        prices[col] = adj_closes[col]
+                prices = raw_data['Adj Close'].copy()
+            else:
+                st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
+                prices = raw_data['Close'].copy()
         else:
             # 단일 티커이거나 flat 컬럼 구조
             if 'Adj Close' in raw_data.columns:
@@ -1376,16 +1370,14 @@ if run_button_clicked:
         mom_periods = config['momentum_params']['periods']
 
         if mom_type == '13612U':
+            # 13612U는 최대 12개월 수익률을 사용합니다.
             max_momentum_period = 12
         elif mom_periods:
+            # '평균 모멘텀' 또는 '상대 모멘텀'의 경우, 설정된 기간 중 가장 긴 값을 사용합니다.
             max_momentum_period = max(mom_periods)
         else:
+            # 예외적인 경우 (기간이 설정되지 않음)를 대비해 기본값 12개월을 사용합니다.
             max_momentum_period = 12
-
-        # --- 👇 [추가/수정] A-Core 전략은 200일(약 10개월) 이평선 계산을 위해 최소 12개월의 데이터가 강제로 필요함 ---
-        if config.get('strategy_mode') == 'A-Core':
-            max_momentum_period = max(max_momentum_period, 12)
-        # ----------------------------------------------------------------------------------------
 
         # 백테스트 시작일로부터 최대 모멘텀 기간만큼 이전 날짜를 데이터 요청 시작일로 설정합니다.
         data_fetch_start_date = pd.to_datetime(config['start_date']) - pd.DateOffset(months=max_momentum_period)
