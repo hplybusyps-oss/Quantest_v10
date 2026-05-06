@@ -782,7 +782,7 @@ def get_price_data(tickers, start, end, user_start_date):
         if actual_latest_start <= pd.to_datetime(user_start_date):
             culprit_tickers = [] # 워밍업 기간에 해당하는 경우는 원인 제공자가 없는 것으로 처리
         
-        final_prices = prices[successful_tickers].dropna(axis=0, how='all')
+        final_prices = prices[successful_tickers].dropna(axis=0, how='any')
 
         return final_prices, failed_tickers, culprit_tickers
     except Exception as e:
@@ -1383,24 +1383,12 @@ if run_button_clicked:
         # 2. 계산된 시작일로 데이터를 요청합니다.
         prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'], config['start_date'])
                 
-        if prices is None or prices.empty:
+        if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
             st.stop()
 
-        # --- [추가] 카나리아를 제외한 '실제 거래 자산'들이 모두 존재하는 날짜 찾기 ---
-        non_canary_tickers = [t for t in prices.columns if t not in canary_tickers]
-        if non_canary_tickers:
-            actual_latest_start = prices[non_canary_tickers].dropna(how='any').index[0]
-        else:
-            actual_latest_start = prices.index[0]
-        # --------------------------------------------------------------------------------
-
         momentum_scores = calculate_signals(prices, config)
         if momentum_scores.empty: st.error("모멘텀 시그널 계산에 실패했습니다."); st.stop()
-        
-        # --- [추가] 백테스트 엔진이 꼬이지 않도록, 모든 자산이 모인 시점 이후의 시그널만 넘깁니다 ---
-        momentum_scores = momentum_scores[momentum_scores.index >= actual_latest_start]
-        # ----------------------------------------------------------------------------------------------
         
         # ── 전략 분기: HAA vs A-Core ──────────────────────────────────────
         phase_scores_log = None
@@ -1409,8 +1397,6 @@ if run_button_clicked:
         if config.get('strategy_mode') == 'A-Core' and config.get('acore_config'):
             with st.spinner('🌡️ A-Core: 시장 국면 판단 중...'):
                 market_phase_series = determine_market_phase(prices, canary_tickers, config)
-                # --- [추가] 시장 국면 역시 모든 자산이 모인 시점 이후로 맞춥니다 ---
-                market_phase_series = market_phase_series[market_phase_series.index >= actual_latest_start]
             with st.spinner('📊 A-Core: 샤프비율 랭킹 & 카테고리 캡 적용 중...'):
                 target_weights, investment_mode, phase_scores_log = construct_acore_portfolio(
                     prices, config, prices.columns.tolist(), market_phase_series
@@ -1511,7 +1497,6 @@ if run_button_clicked:
         
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
-            'actual_latest_start': actual_latest_start,
             'max_momentum_period': max_momentum_period,
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
@@ -1949,13 +1934,6 @@ with tab1:
             st.warning("그래프를 그리는데 필요한 데이터(가격, 설정)가 결과에 포함되지 않았습니다.")
         else:
             full_momentum_scores = calculate_full_momentum(prices_for_chart, config_for_chart)
-            
-            # --- [추가] 사용자가 설정한 시작일과 모든 자산이 모인 날짜 중 늦은 날짜를 그래프 시작점으로 설정 ---
-            graph_start_date = max(pd.to_datetime(config_for_chart['start_date']), results.get('actual_latest_start', prices_for_chart.index[0]))
-            
-            full_momentum_scores = full_momentum_scores[full_momentum_scores.index >= graph_start_date]
-            display_prices_raw = prices_for_chart[prices_for_chart.index >= graph_start_date]
-            # -------------------------------------------------------------------------------------------------
 
             _bt_type    = config_for_chart.get('backtest_type', '일별')
             _rebal_day  = config_for_chart.get('rebalance_day', '월말')
@@ -1963,13 +1941,14 @@ with tab1:
             if _bt_type == '월별':
                 if _rebal_day == '월초':
                     display_momentum = full_momentum_scores.resample('MS').first()
-                    display_prices   = display_prices_raw.resample('MS').first()
+                    display_prices   = prices_for_chart.resample('MS').first()
                 else:
+                    # pandas 2.2+: 'M' → 'ME'
                     display_momentum = full_momentum_scores.resample('ME').last()
-                    display_prices   = display_prices_raw.resample('ME').last()
+                    display_prices   = prices_for_chart.resample('ME').last()
             else:
                 display_momentum = full_momentum_scores
-                display_prices   = display_prices_raw
+                display_prices   = prices_for_chart
 
             _canary_tickers  = config_for_chart['tickers']['CANARY']
             _benchmark_ticker = config_for_chart['benchmark']
