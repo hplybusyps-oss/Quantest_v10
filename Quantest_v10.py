@@ -1909,7 +1909,9 @@ with tab1:
                                 
                             df_log = pd.DataFrame(rows)
                             st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '방어 자산 대피/현금'}")
-                            st.dataframe(df_log.set_index('자산'), use_container_width=True)
+                            
+                            # 👇 height=210을 추가하여 약 5줄 정도만 보이도록 스크롤을 생성합니다.
+                            st.dataframe(df_log.set_index('자산'), use_container_width=True, height=210)
 
             st.divider()
 
