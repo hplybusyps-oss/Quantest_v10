@@ -624,7 +624,7 @@ if strategy_mode == 'A-Core':
             _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
             # 대체 자산 기본값: pkl 복원 시 sb_acore_alt_tickers 우선, 없으면 힌트 자동 추론
-            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', 'GNR', 'VNQ', 'IYR']
+            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', 'GNR', 'VNQ', 'IYR', '411060.KS', '476760.KS', '352560.KS', '305080.KS', '276000.KS']
             _loaded_alt_tickers = st.session_state.get('sb_acore_alt_tickers', None)
             if _loaded_alt_tickers is not None:
                 # pkl에서 복원된 대체 자산 목록을 label 형식으로 변환
@@ -1039,10 +1039,9 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
     rebal_dates = market_phase_series.index
     target_weights = pd.DataFrame(0.0, index=rebal_dates, columns=prices.columns)
     investment_mode = pd.Series(index=rebal_dates, dtype=str)
-    phase_scores_log = {}  # 국면별 점수 로그 (시각화용)
+    phase_scores_log = {}
 
     def get_vol(ticker, date):
-        """연율화 변동성(90일 기준) 계산 헬퍼"""
         price_hist = prices[ticker].loc[:date]
         if len(price_hist) < vol_window + 1:
             return np.nan
@@ -1056,82 +1055,95 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
 
     for date in rebal_dates:
         phase = market_phase_series.get(date, '약세')
+        log_details = {}
 
-        # ── 약세 국면: 방어 자산 중 모멘텀 1위 100% 집중 ──────────────────
+        # ── 약세 국면 ──────────────────────────────────────────────────
         if phase == '약세':
             investment_mode[date] = '약세 (Defensive)'
-            mom_all = calculate_acore_momentum(date, prices, config, '약세')  # 한 번만 계산
+            mom_all = calculate_acore_momentum(date, prices, config, '약세')
             def_scores = {}
             for ticker in defensive_assets:
                 mom_score = mom_all.get(ticker, np.nan) if hasattr(mom_all, 'get') else (mom_all[ticker] if ticker in mom_all.index else np.nan)
-                # 절대 모멘텀 필터 & 변동성 필터
+                
                 if pd.isna(mom_score) or mom_score <= 0:
+                    log_details[ticker] = {'score': mom_score, 'category': '방어', 'status': '모멘텀 음수'}
                     continue
                 if not calculate_volatility_zscore_filter(date, prices, ticker, vol_window, zscore_threshold):
+                    log_details[ticker] = {'score': mom_score, 'category': '방어', 'status': '과변동성 탈락'}
                     continue
+                    
                 def_scores[ticker] = mom_score
+                log_details[ticker] = {'score': mom_score, 'category': '방어', 'status': '후보'}
 
+            selected_assets = []
             if def_scores:
                 best_def = max(def_scores, key=def_scores.get)
                 target_weights.loc[date, best_def] = 1.0
-                phase_scores_log[date] = {'phase': phase, 'scores': def_scores, 'selected': [best_def]}
+                selected_assets = [best_def]
+                for t in def_scores:
+                    log_details[t]['status'] = '✅ 편입' if t == best_def else '순위 미달'
             else:
-                # 방어 자산도 모멘텀 양수인 것이 없으면 모든 방어 자산 중 최고 모멘텀으로 fallback
                 if defensive_assets:
                     all_def_scores = {t: mom_all.get(t, -np.inf) if hasattr(mom_all, 'get') else (mom_all[t] if t in mom_all.index else -np.inf) for t in defensive_assets}
                     best_fallback = max(all_def_scores, key=all_def_scores.get)
                     target_weights.loc[date, best_fallback] = 1.0
-                    phase_scores_log[date] = {'phase': phase, 'scores': all_def_scores, 'selected': [best_fallback]}
+                    selected_assets = [best_fallback]
+                    log_details[best_fallback] = {'score': all_def_scores[best_fallback], 'category': '방어', 'status': '✅ 편입 (예비)'}
+
+            phase_scores_log[date] = {'phase': phase, 'details': log_details, 'selected': selected_assets}
             continue
 
-        # ── 강세/중립 국면 ─────────────────────────────────────────────────
+        # ── 강세/중립 국면 ───────────────────────────────────────────────
         investment_mode[date] = '강세 (Aggressive)' if phase == '강세' else '중립 (Neutral)'
         mom_scores = calculate_acore_momentum(date, prices, config, phase)
 
         sharpe_scores = {}
         for ticker in aggressive_assets:
             mom_score = mom_scores.get(ticker, np.nan) if hasattr(mom_scores, 'get') else (mom_scores[ticker] if ticker in mom_scores.index else np.nan)
-
-            # 기본 방어 1: 모멘텀 > 0 필터 (절대 모멘텀)
-            if pd.isna(mom_score) or mom_score <= 0:
-                continue
-
-            # 기본 방어 2: 과변동성 Z-Score 필터
-            if not calculate_volatility_zscore_filter(date, prices, ticker, vol_window, zscore_threshold):
-                continue
-
-            # 변동성 계산 (샤프비율 분모)
-            vol = get_vol(ticker, date)
-            if pd.isna(vol) or vol <= 0:
-                continue
-
-            # 안전자산은 강세/중립 국면에서 제외 (분모의 함정 방지)
             cat = get_category(ticker)
+            vol = get_vol(ticker, date)
+            raw_sharpe = (mom_score / vol) if not pd.isna(vol) and vol > 0 else np.nan
+
+            if pd.isna(mom_score) or mom_score <= 0:
+                log_details[ticker] = {'score': raw_sharpe, 'category': cat, 'status': '모멘텀 음수'}
+                continue
+
+            if not calculate_volatility_zscore_filter(date, prices, ticker, vol_window, zscore_threshold):
+                log_details[ticker] = {'score': raw_sharpe, 'category': cat, 'status': '과변동성 탈락'}
+                continue
+
+            if pd.isna(vol) or vol <= 0:
+                log_details[ticker] = {'score': np.nan, 'category': cat, 'status': '데이터 부족'}
+                continue
+
             if cat == '안전자산':
                 continue
 
-            sharpe_scores[ticker] = mom_score / vol
+            sharpe_scores[ticker] = raw_sharpe
+            log_details[ticker] = {'score': raw_sharpe, 'category': cat, 'status': '후보'}
 
         if not sharpe_scores:
-            # 공격 자산 없으면 방어 자산으로 대피 (mom_scores 재활용)
             def_scores = {}
             for ticker in defensive_assets:
                 ms = mom_scores.get(ticker, np.nan) if hasattr(mom_scores, 'get') else (mom_scores[ticker] if ticker in mom_scores.index else np.nan)
                 if not pd.isna(ms) and ms > 0:
                     def_scores[ticker] = ms
+            
+            selected_assets = []
             if def_scores:
                 best_def = max(def_scores, key=def_scores.get)
                 target_weights.loc[date, best_def] = 1.0
+                selected_assets = [best_def]
             elif defensive_assets:
-                # 마지막 fallback: 모든 방어 자산 중 모멘텀 최대
                 all_def_ms = {t: (mom_scores.get(t, -np.inf) if hasattr(mom_scores, 'get') else (mom_scores[t] if t in mom_scores.index else -np.inf)) for t in defensive_assets}
                 best_fb = max(all_def_ms, key=all_def_ms.get)
                 target_weights.loc[date, best_fb] = 1.0
-            phase_scores_log[date] = {'phase': phase, 'scores': {}, 'selected': []}
+                selected_assets = [best_fb]
+            
+            phase_scores_log[date] = {'phase': phase, 'details': log_details, 'selected': selected_assets}
             continue
 
-        # ── 카테고리 캡 적용 ───────────────────────────────────────────────
-        # 카테고리별로 상위 category_cap개 티커만 남기고, 그 안에서 전체 샤프 순위를 매김
+        # 카테고리 캡 적용
         sorted_by_sharpe = sorted(sharpe_scores.items(), key=lambda x: x[1], reverse=True)
         category_count = {}
         filtered_scores = {}
@@ -1141,12 +1153,14 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
             if cnt < category_cap:
                 filtered_scores[ticker] = score
                 category_count[cat] = cnt + 1
+            else:
+                log_details[ticker]['status'] = '카테고리 캡 초과'
 
         if not filtered_scores:
-            phase_scores_log[date] = {'phase': phase, 'scores': sharpe_scores, 'selected': []}
+            phase_scores_log[date] = {'phase': phase, 'details': log_details, 'selected': []}
             continue
 
-        # ── Top N 선정 및 동일 비중 배분 ──────────────────────────────────
+        # Top N 선정
         top_sorted = sorted(filtered_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
         selected_assets = [t for t, _ in top_sorted]
 
@@ -1154,10 +1168,12 @@ def construct_acore_portfolio(prices: pd.DataFrame, config: dict,
         for asset in selected_assets:
             target_weights.loc[date, asset] = weight_per
 
+        for t in filtered_scores:
+            log_details[t]['status'] = '✅ 편입' if t in selected_assets else '순위 미달'
+
         phase_scores_log[date] = {
             'phase': phase,
-            'scores': filtered_scores,
-            'sharpe_raw': sharpe_scores,
+            'details': log_details,
             'selected': selected_assets
         }
 
@@ -1861,27 +1877,41 @@ with tab1:
                 # 샤프비율 점수 로그 상세 보기
                 if phase_scores_log:
                     with st.expander("📊 A-Core 샤프비율 랭킹 상세 (최근 12회)"):
+                        st.markdown("> **💡 참고:** 점수가 높아도 편입되지 않은 경우, 우측 `상태` 열에서 이유(카테고리 캡 초과, 과변동성 탈락 등)를 명확히 확인할 수 있습니다.")
                         recent_dates = sorted(phase_scores_log.keys(), reverse=True)[:12]
                         for d in recent_dates:
                             log = phase_scores_log[d]
                             phase_str = log.get('phase', '-')
-                            scores    = log.get('scores', {})
+                            details   = log.get('details', {})
                             selected  = log.get('selected', [])
-                            if not scores:
+                            
+                            if not details:
                                 st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 편입 자산 없음 (현금)")
                                 continue
+                                
                             rows = []
-                            for tk, sc in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+                            for tk, info in sorted(details.items(), key=lambda x: (pd.isna(x[1]['score']), -x[1]['score'] if not pd.isna(x[1]['score']) else 0)):
                                 name = tk
                                 if etf_df is not None:
                                     m = etf_df[etf_df['Ticker'] == tk]
                                     if not m.empty:
                                         name = f"{tk} - {m.iloc[0]['Name']}"
-                                rows.append({'자산': name, '샤프비율 점수': f"{sc:.3f}",
-                                             '선택': '✅' if tk in selected else ''})
+                                
+                                score_val = info.get('score', np.nan)
+                                score_str = f"{score_val:.3f}" if not pd.isna(score_val) else "-"
+                                
+                                rows.append({
+                                    '자산': name, 
+                                    '카테고리': info.get('category', '-'),
+                                    '점수': score_str,
+                                    '상태': info.get('status', '-')
+                                })
+                                
                             df_log = pd.DataFrame(rows)
-                            st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '없음'}")
-                            st.dataframe(df_log.set_index('자산'), use_container_width=True)
+                            st.markdown(f"**{d.strftime('%Y-%m')}** [{phase_str}] → 선택: {', '.join(selected) if selected else '방어 자산 대피/현금'}")
+                            
+                            # 👇 height=210을 추가하여 약 5줄 정도만 보이도록 스크롤을 생성합니다.
+                            st.dataframe(df_log.set_index('자산'), use_container_width=True, height=210)
 
             st.divider()
 
