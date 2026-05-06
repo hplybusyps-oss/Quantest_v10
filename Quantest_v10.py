@@ -782,7 +782,7 @@ def get_price_data(tickers, start, end, user_start_date):
         if actual_latest_start <= pd.to_datetime(user_start_date):
             culprit_tickers = [] # 워밍업 기간에 해당하는 경우는 원인 제공자가 없는 것으로 처리
         
-        final_prices = prices[successful_tickers].dropna(axis=0, how='any')
+        final_prices = prices[successful_tickers].dropna(axis=0, how='all')
 
         return final_prices, failed_tickers, culprit_tickers
     except Exception as e:
@@ -1382,6 +1382,11 @@ if run_button_clicked:
         
         # 2. 계산된 시작일로 데이터를 요청합니다.
         prices, failed_tickers, culprit_tickers = get_price_data(all_tickers, data_fetch_start_date, config['end_date'], config['start_date'])
+        # --- [여기에 추가] 실제 백테스트 시작일 계산 ---
+        # 워밍업 데이터를 보존한 prices에서 모든 자산이 NaN 없이 존재하는 첫 날짜 찾기
+        all_assets_valid_date = prices.dropna(how='any').index[0] if not prices.dropna(how='any').empty else prices.index[0]
+        actual_backtest_start = max(pd.to_datetime(config['start_date']), all_assets_valid_date)
+        # -----------------------------------------------
                 
         if prices is None:
             st.error("데이터 로딩에 실패하여 백테스트를 중단합니다.")
@@ -1453,12 +1458,11 @@ if run_button_clicked:
             portfolio_returns = (daily_weights.shift(1) * daily_returns).sum(axis=1) - costs.where(rebal_dates_series, 0)
             benchmark_returns = daily_returns[config['benchmark']] if config['benchmark'] in daily_returns.columns else pd.Series(0.0, index=daily_returns.index)
 
-        # 워밍업 기간(사전 로딩 기간)의 수익률 데이터를 제거합니다.
-        start_date_dt = pd.to_datetime(config['start_date'])
-        portfolio_returns = portfolio_returns[portfolio_returns.index >= start_date_dt]
-        benchmark_returns = benchmark_returns[benchmark_returns.index >= start_date_dt]
+        # 워밍업 기간(사전 로딩 기간)의 수익률 데이터를 제거합니다. (수정 전 start_date_dt 대신 actual_backtest_start 사용)
+        portfolio_returns = portfolio_returns[portfolio_returns.index >= actual_backtest_start]
+        benchmark_returns = benchmark_returns[benchmark_returns.index >= actual_backtest_start]
         
-        contribution_dates = target_weights.index[target_weights.index >= start_date_dt]
+        contribution_dates = target_weights.index[target_weights.index >= actual_backtest_start]
         cumulative_returns = calculate_cumulative_returns_with_dca(portfolio_returns, config['initial_capital'], config['monthly_contribution'], contribution_dates)
         benchmark_cumulative = calculate_cumulative_returns_with_dca(benchmark_returns, config['initial_capital'], config['monthly_contribution'], contribution_dates)
         
@@ -1497,6 +1501,7 @@ if run_button_clicked:
         
         st.session_state['results'] = {
             'prices': prices, 'failed_tickers': failed_tickers, 'culprit_tickers': culprit_tickers,
+            'actual_backtest_start': actual_backtest_start,
             'max_momentum_period': max_momentum_period,
             'config': config, 'currency_symbol': currency_symbol, 'etf_df': etf_df,
             'momentum_scores': momentum_scores,
@@ -1841,13 +1846,18 @@ with tab1:
                 st.markdown(f"- Z-Score 임계값: `{ac.get('zscore_threshold', 1.5)}`")     
             
         # 모든 메시지 표시 후, 분석 데이터를 시작일 기준으로 필터링
-        backtest_start_date = pd.to_datetime(results['config']['start_date'])
+        actual_backtest_start = results.get('actual_backtest_start', pd.to_datetime(results['config']['start_date']))
 
-        # results 딕셔너리 내부의 데이터를 직접 필터링
-        results['prices'] = results['prices'][results['prices'].index >= backtest_start_date]
-        results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= backtest_start_date]
-        results['target_weights'] = results['target_weights'][results['target_weights'].index >= backtest_start_date]
-        results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= backtest_start_date]
+        # 그래프 계산을 위해 필터링 전의 전체 가격 데이터 보존 (핵심)
+        full_prices = results['prices'].copy()
+
+        # results 딕셔너리 내부의 데이터를 실제 백테스트 시작일 기준으로 필터링
+        results['prices'] = results['prices'][results['prices'].index >= actual_backtest_start]
+        results['momentum_scores'] = results['momentum_scores'][results['momentum_scores'].index >= actual_backtest_start]
+        results['target_weights'] = results['target_weights'][results['target_weights'].index >= actual_backtest_start]
+        results['investment_mode'] = results['investment_mode'][results['investment_mode'].index >= actual_backtest_start]
+        if results.get('market_phase_series') is not None:
+             results['market_phase_series'] = results['market_phase_series'][results['market_phase_series'].index >= actual_backtest_start]
 
         # 이후 코드에서 사용할 'prices' 변수도 필터링된 데이터로 다시 할당
         prices = results['prices']
@@ -1927,13 +1937,19 @@ with tab1:
             'risk_off': '#fff3cd',  # HAA Defensive
         }
 
-        prices_for_chart = results.get('prices')
+        prices_for_chart = full_prices # 보존해둔 전체 데이터(워밍업 포함) 사용
         config_for_chart = results.get('config')
+        actual_backtest_start = results.get('actual_backtest_start', pd.to_datetime(config_for_chart['start_date']))
 
         if prices_for_chart is None or config_for_chart is None:
             st.warning("그래프를 그리는데 필요한 데이터(가격, 설정)가 결과에 포함되지 않았습니다.")
         else:
+            # 1. 과거 워밍업 데이터가 포함된 상태로 모멘텀을 완벽하게 계산
             full_momentum_scores = calculate_full_momentum(prices_for_chart, config_for_chart)
+            
+            # 2. 계산 완료 후, 화면에 표시할 실제 백테스트 기간으로만 자르기 (그래프 노출 제한)
+            full_momentum_scores = full_momentum_scores[full_momentum_scores.index >= actual_backtest_start]
+            display_prices_raw = prices_for_chart[prices_for_chart.index >= actual_backtest_start]
 
             _bt_type    = config_for_chart.get('backtest_type', '일별')
             _rebal_day  = config_for_chart.get('rebalance_day', '월말')
@@ -1941,14 +1957,13 @@ with tab1:
             if _bt_type == '월별':
                 if _rebal_day == '월초':
                     display_momentum = full_momentum_scores.resample('MS').first()
-                    display_prices   = prices_for_chart.resample('MS').first()
+                    display_prices   = display_prices_raw.resample('MS').first()
                 else:
-                    # pandas 2.2+: 'M' → 'ME'
                     display_momentum = full_momentum_scores.resample('ME').last()
-                    display_prices   = prices_for_chart.resample('ME').last()
+                    display_prices   = display_prices_raw.resample('ME').last()
             else:
                 display_momentum = full_momentum_scores
-                display_prices   = prices_for_chart
+                display_prices   = display_prices_raw
 
             _canary_tickers  = config_for_chart['tickers']['CANARY']
             _benchmark_ticker = config_for_chart['benchmark']
