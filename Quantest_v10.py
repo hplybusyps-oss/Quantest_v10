@@ -623,23 +623,27 @@ if strategy_mode == 'A-Core':
             _all_labels = list(_tk_labels.values())
             _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
-            # 대체 자산 기본값: pkl 복원 시 sb_acore_alt_tickers 우선, 없으면 힌트 자동 추론
+            # --- [수정된 로직] pkl 파일 로드 시 세션 상태를 직접 업데이트하여 복구 보장 ---
             _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', 'GNR', 'VNQ', 'IYR', '411060.KS', '476760.KS', '352560.KS', '305080.KS', '276000.KS']
+            
             _loaded_alt_tickers = st.session_state.get('sb_acore_alt_tickers', None)
+            
+            # 1. pkl 파일에서 불러온 임시 데이터가 있는 경우
             if _loaded_alt_tickers is not None:
-                # pkl에서 복원된 대체 자산 목록을 label 형식으로 변환
-                _valid_default_alt = [_tk_labels[t] for t in _loaded_alt_tickers if t in _tk_labels]
-                # 한 번 사용 후 삭제 (이후 사용자가 직접 변경 가능하도록)
+                # 티커를 현재의 라벨 형식으로 변환하여 위젯의 key값('acore_bucket_alt')에 직접 주입
+                st.session_state['acore_bucket_alt'] = [_tk_labels[t] for t in _loaded_alt_tickers if t in _tk_labels]
+                # 임시 변수 삭제 (다음 렌더링 시 영향을 주지 않도록)
                 del st.session_state['sb_acore_alt_tickers']
-            else:
-                _valid_default_alt = [_tk_labels[t] for t in _agg_tickers_for_cat if t.upper() in _DEFAULT_ALT_HINTS and t in _tk_labels]
+            
+            # 2. 파일 로드가 아니고, 처음 실행 시 기본 힌트를 적용해야 하는 경우
+            elif 'acore_bucket_alt' not in st.session_state:
+                st.session_state['acore_bucket_alt'] = [_tk_labels[t] for t in _agg_tickers_for_cat if t.upper() in _DEFAULT_ALT_HINTS and t in _tk_labels]
 
-            # 오직 '대체 자산'만 다중 선택 위젯으로 구현
             st.markdown("**대체 자산 선택**")
+            # [핵심 수정] default 인자를 제거하고, st.session_state['acore_bucket_alt']가 위젯 상태를 직접 관리하게 함
             chosen_alt_labels = st.multiselect(
                 "",
                 options=_all_labels,
-                default=_valid_default_alt,
                 key='acore_bucket_alt',
                 label_visibility='collapsed'
             )
