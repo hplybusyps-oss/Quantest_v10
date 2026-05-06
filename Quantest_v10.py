@@ -826,6 +826,8 @@ def calculate_full_momentum(prices, config):
     for month in mom_periods:
         # shift를 사용하여 과거 가격 대비 수익률 계산
         ret = prices.pct_change(periods=month * 21)
+        # --- [수정된 부분] 더하기 전에 개별 기간에서 발생한 결측치(NaN)를 먼저 0으로 채워줍니다 ---
+        ret = ret.fillna(0) 
         returns_dfs.append(ret)
         
     # 모든 기간의 수익률을 합산하여 평균
@@ -833,7 +835,7 @@ def calculate_full_momentum(prices, config):
         return pd.DataFrame(0, index=prices.index, columns=prices.columns)
         
     full_momentum_scores = sum(returns_dfs) / len(returns_dfs)
-    return full_momentum_scores.fillna(0)
+    return full_momentum_scores
 
 # =============================================================================
 #   [A-Core 신규] 핵심 백엔드 로직 함수
