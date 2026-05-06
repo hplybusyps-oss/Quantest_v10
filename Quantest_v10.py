@@ -740,20 +740,18 @@ def get_price_data(tickers, start, end, user_start_date):
 
         # yfinance MultiIndex 처리: 단일 티커도 MultiIndex를 반환할 수 있음
         if isinstance(raw_data.columns, pd.MultiIndex):
-            # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
-            if 'Adj Close' in raw_data.columns.get_level_values(0):
-                prices = raw_data['Adj Close'].copy()
-                
-                # --- 👇 [추가/수정] yfinance 버그 대응: ^GSPC 등 지수의 Adj Close가 비어있으면 일반 Close 데이터로 채움 ---
-                if 'Close' in raw_data.columns.get_level_values(0):
-                    closes = raw_data['Close']
-                    for col in prices.columns:
-                        if prices[col].isnull().all() and col in closes.columns:
-                            prices[col] = closes[col]
-                # ---------------------------------------------------------------------------------
-            else:
-                st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
+            # 1. 모든 종목의 '종가(Close)'를 기본 데이터로 먼저 깔아둡니다. (지수 누락 완벽 차단)
+            if 'Close' in raw_data.columns.get_level_values(0):
                 prices = raw_data['Close'].copy()
+            else:
+                prices = pd.DataFrame()
+                
+            # 2. '수정 종가(Adj Close)'가 존재하는 종목만 정상 데이터인지 확인 후 덮어씌웁니다.
+            if 'Adj Close' in raw_data.columns.get_level_values(0):
+                adj_closes = raw_data['Adj Close']
+                for col in adj_closes.columns:
+                    if not adj_closes[col].isnull().all():
+                        prices[col] = adj_closes[col]
         else:
             # 단일 티커이거나 flat 컬럼 구조
             if 'Adj Close' in raw_data.columns:
