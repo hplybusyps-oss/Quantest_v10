@@ -624,7 +624,7 @@ if strategy_mode == 'A-Core':
             _label_to_tk = {v: k for k, v in _tk_labels.items()}
 
             # --- [수정된 로직] pkl 파일 로드 시 세션 상태를 직접 업데이트하여 복구 보장 ---
-            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', 'GNR', 'VNQ', 'IYR', '411060.KS', '476760.KS', '352560.KS', '305080.KS', '276000.KS']
+            _DEFAULT_ALT_HINTS = ['GLD', 'IAU', 'SLV', 'DBC', 'USO', 'PDBC', 'GNR', 'VNQ', 'IYR', '411060.KS', '476760.KS', '352560.KS', '305080.KS', '276000.KS', '415920.KS']
             
             _loaded_alt_tickers = st.session_state.get('sb_acore_alt_tickers', None)
             
