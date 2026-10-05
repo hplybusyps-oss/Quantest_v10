@@ -102,16 +102,9 @@ def _load_browser_prices(tickers, start, end):
     return p.dropna(axis=1, how='all')
 
 
-def _github_token_path():
-    return '/home/pyodide/persist/github_token'
-
-
 def _github_get_token():
-    try:
-        with open(_github_token_path(), encoding='utf-8') as f:
-            return f.read().strip()
-    except Exception:
-        return ''
+    """브라우저 버전: index.html 이 localStorage 의 토큰을 GITHUB_TOKEN 환경변수로 넘겨준다."""
+    return os.environ.get('GITHUB_TOKEN', '').strip()
 
 
 def _github_request(method, path, body=None):
@@ -534,24 +527,16 @@ with st.sidebar.expander("티커 관리"):
 if IS_BROWSER and 'gh' in st.query_params:
     with st.sidebar.expander("GitHub 연결", expanded=True):
         _has_tok = bool(_github_get_token())
-        st.caption(('● 연결됨. ' if _has_tok else '') +
-                   '토큰은 이 브라우저에만 저장됩니다. 만드는 법: GitHub → Settings → Developer settings → '
-                   'Fine-grained tokens → 저장소 Quantest_v10 만 선택 → Contents: Read and write')
-        _tok_in = st.text_input('GitHub 토큰', type='password', placeholder='github_pat_...', key='gh_token_input')
-        _c1, _c2 = st.columns(2)
-        if _c1.button('저장 및 확인', use_container_width=True):
-            if _tok_in.strip():
-                os.makedirs(os.path.dirname(_github_token_path()), exist_ok=True)
-                with open(_github_token_path(), 'w', encoding='utf-8') as _f:
-                    _f.write(_tok_in.strip())
+        st.caption(('● 연결됨. ' if _has_tok else '○ 연결 안 됨. ') +
+                   '토큰 입력·해제는 화면 오른쪽 위 칸에서 합니다. 토큰은 이 브라우저에만 저장됩니다. '
+                   '만드는 법: GitHub → Settings → Developer settings → Fine-grained tokens → '
+                   '저장소 Quantest_v10 만 선택 → Contents: Read and write')
+        if _has_tok and st.button('연결 확인', use_container_width=True):
             _code, _info = _github_request('GET', '')
             if _code == 200 and isinstance(_info, dict) and _info.get('permissions', {}).get('push'):
                 st.success('연결됨 ✓')
             else:
                 st.error(f'확인 실패 ({_code}) — 토큰과 Contents 쓰기 권한을 확인하세요')
-        if _has_tok and _c2.button('연결 해제', use_container_width=True):
-            os.remove(_github_token_path())
-            st.rerun()
 
 st.sidebar.header("4. 자산군 설정")
 if etf_df is not None:

@@ -14,6 +14,17 @@
       padding: 16px; text-align: center;
     }
     #boot small { color: #888; }
+    #ghPanel {
+      position: fixed; right: 16px; top: 64px; z-index: 2147483000; width: min(320px, calc(100vw - 32px));
+      background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.12);
+      font: 13px "Malgun Gothic", system-ui, sans-serif; color: #333;
+    }
+    #ghPanel b { display: block; margin-bottom: 8px; font-size: 14px; }
+    #ghPanel input { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; font: inherit; }
+    #ghPanel .row { display: flex; gap: 6px; margin-top: 8px; }
+    #ghPanel button { flex: 1; padding: 7px; border-radius: 6px; border: 1px solid #ccc; background: #fff; font: inherit; cursor: pointer; }
+    #ghPanel button.primary { background: #ff4b4b; border-color: #ff4b4b; color: #fff; }
+    #ghPanel small { display: block; margin-top: 8px; color: #777; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -24,6 +35,11 @@
   <div id="root"></div>
   <script type="module">
     import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.9.2/build/stlite.js";
+
+    // GitHub 토큰은 이 브라우저의 localStorage 에만 저장하고, 앱 시작 시 Python 에 환경변수로 전달
+    const TOKEN_KEY = "quantest.githubToken";
+    let token = "";
+    try { token = localStorage.getItem(TOKEN_KEY) || ""; } catch { /* 저장소 차단 */ }
 
     const v = "__BUILD_ID__";   // 배포마다 바뀜 → 브라우저 캐시 무효화
     mount(
@@ -36,10 +52,36 @@
           "prices.csv":      { url: `./prices.csv?v=${v}` },
           "NanumGothic.ttf": { url: "./NanumGothic.ttf" },
         },
-        idbfsMountpoints: ["/home/pyodide/persist"],   // GitHub 토큰 보관 (이 브라우저에만)
+        env: { GITHUB_TOKEN: token },
       },
       document.getElementById("root"),
     );
+
+    // 주소에 ?gh 가 있을 때만 토큰 입력 칸 표시
+    if (new URLSearchParams(location.search).has("gh")) {
+      const panel = document.createElement("div");
+      panel.id = "ghPanel";
+      panel.innerHTML = `
+        <b>GitHub 토큰 ${token ? "<span style='color:#1b5e20'>● 연결됨</span>" : ""}</b>
+        <input type="password" id="ghTok" placeholder="${token ? "저장됨 — 바꾸려면 새 토큰 입력" : "github_pat_..."}" autocomplete="off">
+        <div class="row">
+          <button class="primary" id="ghSave">저장</button>
+          ${token ? '<button id="ghDel">연결 해제</button>' : ""}
+          <button id="ghClose">닫기</button>
+        </div>
+        <small>토큰은 이 브라우저에만 저장됩니다. 저장하면 페이지가 다시 열리고, 사이드바 'GitHub 연결'에서 확인할 수 있습니다.</small>`;
+      document.body.appendChild(panel);
+      const store = val => {
+        try { val ? localStorage.setItem(TOKEN_KEY, val) : localStorage.removeItem(TOKEN_KEY); location.reload(); }
+        catch { alert("이 브라우저는 저장소를 차단했습니다"); }
+      };
+      panel.querySelector("#ghSave").onclick = () => {
+        const val = panel.querySelector("#ghTok").value.trim();
+        if (val) store(val);
+      };
+      panel.querySelector("#ghDel")?.addEventListener("click", () => store(""));
+      panel.querySelector("#ghClose").onclick = () => panel.remove();
+    }
 
     // Streamlit 화면이 그려지면 안내 문구 제거
     const hide = () => document.getElementById("boot")?.remove();
