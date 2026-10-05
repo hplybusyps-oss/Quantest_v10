@@ -148,6 +148,22 @@ def _github_save_stock_list(csv_path, message):
     return False, f'GitHub 저장 실패 ({code} {msg})'
 
 
+# --- 브라우저 버전: 마지막 사이드바 설정 복원 (페이지를 열 때 한 번) ---
+# index.html 이 localStorage 에 저장된 마지막 설정을 QUANTEST_LAST_CONFIG 환경변수로 넘겨준다.
+if IS_BROWSER and not st.session_state.get('_last_config_restored'):
+    st.session_state['_last_config_restored'] = True
+    _saved_cfg = os.environ.get('QUANTEST_LAST_CONFIG', '')
+    if _saved_cfg and 'config_to_load' not in st.session_state:
+        try:
+            import json as _json
+            _cfg = _json.loads(_saved_cfg)
+            # 종료일을 '오늘'(기본값) 그대로 뒀던 경우에는 복원하지 않음 → 항상 최신 날짜까지
+            if _cfg.get('end_date') and _cfg.get('end_date') == _cfg.get('_saved_on'):
+                _cfg.pop('end_date')
+            st.session_state.config_to_load = _cfg
+        except Exception:
+            pass
+
 # --- [추가] .pkl 파일 로드 시 사이드바 상태를 업데이트하는 로직 ---
 # st.rerun() 후 스크립트가 다시 시작될 때 이 부분이 먼저 실행됩니다.
 if 'config_to_load' in st.session_state:
@@ -796,6 +812,23 @@ def gather_current_config():
 
 # 앱이 재실행될 때마다 현재 설정을 가져옴
 current_config = gather_current_config()
+
+# --- 브라우저 버전: 현재 사이드바 설정을 localStorage 에 자동 저장 (바뀌었을 때만) ---
+if IS_BROWSER:
+    import json as _json
+    import streamlit.components.v1 as _components
+    if st.sidebar.button("↺ 설정 초기화", use_container_width=True,
+                         help="저장된 마지막 설정을 지우고 기본값으로 다시 엽니다."):
+        # 저장된 설정 삭제 후 페이지를 새로 열어 모든 위젯을 기본값으로
+        _components.html("<script>try{localStorage.removeItem('quantest.lastConfig')}catch(e){}"
+                         "window.parent.location.reload()</script>", height=0)
+    else:
+        _cfg_json = _json.dumps({**current_config, '_saved_on': str(date.today())}, ensure_ascii=False, default=str)
+        if st.session_state.get('_last_config_saved') != _cfg_json:
+            st.session_state['_last_config_saved'] = _cfg_json
+            _components.html(
+                f"<script>try{{localStorage.setItem('quantest.lastConfig', {_json.dumps(_cfg_json)})}}catch(e){{}}</script>",
+                height=0)
 
 # 마지막 실행 설정이 있고, 현재 설정과 다를 경우 '변경됨' 플래그를 True로 설정
 if 'last_run_config' in st.session_state:

@@ -40,6 +40,9 @@
     const TOKEN_KEY = "quantest.githubToken";
     let token = "";
     try { token = localStorage.getItem(TOKEN_KEY) || ""; } catch { /* 저장소 차단 */ }
+    // 마지막 사이드바 설정 (앱이 설정을 바꿀 때마다 저장) → 시작 시 복원
+    let lastConfig = "";
+    try { lastConfig = localStorage.getItem("quantest.lastConfig") || ""; } catch { /* 저장소 차단 */ }
 
     const v = "__BUILD_ID__";   // 배포마다 바뀜 → 브라우저 캐시 무효화
     mount(
@@ -52,7 +55,7 @@
           "prices.csv":      { url: `./prices.csv?v=${v}` },
           "NanumGothic.ttf": { url: "./NanumGothic.ttf" },
         },
-        env: { GITHUB_TOKEN: token },
+        env: { GITHUB_TOKEN: token, QUANTEST_LAST_CONFIG: lastConfig },
       },
       document.getElementById("root"),
     );
