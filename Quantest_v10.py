@@ -198,6 +198,9 @@ if 'config_to_load' in st.session_state:
     # ── 3. 전략 선택 ─────────────────────────────────────────────────────
     if 'strategy_mode' in loaded_config:
         st.session_state['sb_strategy_mode'] = loaded_config['strategy_mode']
+    # 복원한 자산군이 전략 기본값으로 덮어써지지 않도록
+    if 'tickers' in loaded_config:
+        st.session_state['_asset_defaults_for'] = loaded_config.get('strategy_mode', st.session_state.get('sb_strategy_mode', 'HAA'))
 
     # ── 4. 실행 엔진 설정 ────────────────────────────────────────────────
     if 'backtest_type' in loaded_config:
@@ -558,19 +561,34 @@ st.sidebar.header("4. 자산군 설정")
 if etf_df is not None:
     display_list = etf_df['display'].tolist()
 
-    # --- [수정] session_state 초기화 및 위젯 생성 ---
-    # 기본값 목록 정의
-    default_canary_list = [d for d in ['TIP - iShares TIPS Bond ETF'] if d in display_list]
-    default_aggressive_list = [d for d in ['SPY - SPDR S&P 500 ETF Trust', 'IWM - iShares Russell 2000 ETF', 'EFA - iShares MSCI EAFE ETF', 'VWO - Vanguard FTSE Emerging Markets ETF', 'VNQ - Vanguard Real Estate ETF', 'DBC - Invesco DB Commodity Index Tracking Fund', 'IEF - iShares 7-10 Year Treasury Bond ETF', 'TLT - iShares 20+ Year Treasury Bond ETF'] if d in display_list]
-    default_defensive_list = [d for d in ['BIL - SPDR Bloomberg 1-3 Month T-Bill ETF', 'IEF - iShares 7-10 Year Treasury Bond ETF'] if d in display_list]
+    # --- 운용 전략별 자산군 기본값 (티커 기준) ---
+    STRATEGY_DEFAULT_ASSETS = {
+        'HAA': {
+            'canary':     ['TIP'],
+            'aggressive': ['SPY', 'IWM', 'EFA', 'EEM', 'VNQ', 'PDBC', 'IEF', 'TLT'],
+            'defensive':  ['BIL', 'IEF'],
+        },
+        'A-Core': {
+            'canary':     ['TIP'],
+            'aggressive': ['360750.KS', '133690.KS', '280930.KS', '195980.KS', '352560.KS', '476760.KS',
+                           '411060.KS', '069500.KS', '229200.KS', '241180.KS', '101280.KS', '453810.KS',
+                           '283580.KS', '371160.KS', '305080.KS'],
+            'defensive':  ['305080.KS', '329750.KS', '488770.KS'],
+        },
+    }
+    _ticker_to_display = {d.split(' - ')[0]: d for d in display_list}
 
-    # 앱 첫 실행 시에만 기본값으로 session_state를 초기화
-    if 'selected_canary' not in st.session_state:
-        st.session_state.selected_canary = default_canary_list
-    if 'selected_aggressive' not in st.session_state:
-        st.session_state.selected_aggressive = default_aggressive_list
-    if 'selected_defensive' not in st.session_state:
-        st.session_state.selected_defensive = default_defensive_list
+    def _default_displays(strategy, group):
+        tickers = STRATEGY_DEFAULT_ASSETS.get(strategy, STRATEGY_DEFAULT_ASSETS['HAA'])[group]
+        return [_ticker_to_display[t] for t in tickers if t in _ticker_to_display]
+
+    # 처음 열 때, 또는 운용 전략을 바꿨을 때 그 전략의 기본 자산군으로 설정
+    # (.pkl / 마지막 설정 복원 시에는 복원된 자산군을 유지 — _asset_defaults_for 를 복원 로직에서 지정)
+    if st.session_state.get('_asset_defaults_for') != strategy_mode or 'selected_aggressive' not in st.session_state:
+        st.session_state.selected_canary     = _default_displays(strategy_mode, 'canary')
+        st.session_state.selected_aggressive = _default_displays(strategy_mode, 'aggressive')
+        st.session_state.selected_defensive  = _default_displays(strategy_mode, 'defensive')
+        st.session_state['_asset_defaults_for'] = strategy_mode
 
     # 위젯은 key를 통해 session_state와 자동으로 동기화됨 (default 인자 불필요)
     with st.sidebar.popover("카나리아 자산 선택하기", use_container_width=True):
@@ -590,7 +608,7 @@ if etf_df is not None:
         st.markdown("**공격**"); st.success(f"{', '.join(aggressive_tickers) if aggressive_tickers else '없음'}")
         st.markdown("**방어**"); st.warning(f"{', '.join(defensive_tickers) if defensive_tickers else '없음'}")
 else:
-    aggressive_tickers_str = st.sidebar.text_area("공격 자산군 (쉼표로 구분)", 'SPY,IWM,VEA,VWO,VNQ,DBC,IEF,TLT')
+    aggressive_tickers_str = st.sidebar.text_area("공격 자산군 (쉼표로 구분)", 'SPY,IWM,EFA,EEM,VNQ,PDBC,IEF,TLT')
     defensive_tickers_str = st.sidebar.text_area("방어 자산군 (쉼표로 구분)", 'BIL,IEF')
     canary_tickers_str = st.sidebar.text_area("카나리아 자산 (쉼표로 구분)", 'TIP')
     aggressive_tickers = [t.strip().upper() for t in aggressive_tickers_str.split(',')]
