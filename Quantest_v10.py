@@ -138,7 +138,7 @@ def _github_save_stock_list(csv_path, message):
     """Stock_list.csv 를 저장소에 커밋 → Actions 가 새 티커 데이터를 수집해 재배포."""
     import base64
     if not _github_get_token():
-        return False, '이 브라우저에만 임시 반영됨 — 사이드바 GitHub 연결 후 저장하면 데이터가 수집됩니다'
+        return False, '이 브라우저에만 임시 반영됨'
     with open(csv_path, 'rb') as f:
         content = base64.b64encode(f.read()).decode()
     code, info = 0, None
@@ -530,12 +530,12 @@ with st.sidebar.expander("티커 관리"):
             else:
                 st.warning("삭제할 티커를 먼저 선택해주세요.")
 
-if IS_BROWSER:
-    with st.sidebar.expander("GitHub 연결 (티커 추가 저장용)", expanded=False):
+# 주소 끝에 ?gh 를 붙여 접속했을 때만 표시
+if IS_BROWSER and 'gh' in st.query_params:
+    with st.sidebar.expander("GitHub 연결", expanded=True):
         _has_tok = bool(_github_get_token())
-        st.caption(('● 연결됨. ' if _has_tok else '') +
-                   '토큰은 이 브라우저에만 저장됩니다. 만드는 법: GitHub → Settings → Developer settings → '
-                   'Fine-grained tokens → 저장소 Quantest_v10 만 선택 → Contents: Read and write')
+        if _has_tok:
+            st.caption('● 연결됨')
         _tok_in = st.text_input('GitHub 토큰', type='password', placeholder='github_pat_...', key='gh_token_input')
         _c1, _c2 = st.columns(2)
         if _c1.button('저장 및 확인', use_container_width=True):
@@ -840,7 +840,7 @@ def get_price_data(tickers, start, end, user_start_date):
         if IS_BROWSER:
             prices = _load_browser_prices(tickers, start, end)
             if prices.empty or prices.shape[1] == 0:
-                st.error("선택한 티커의 가격 데이터가 없습니다. '티커 관리'에서 추가하면 GitHub 에서 데이터를 수집합니다 (2~3분).")
+                st.error("선택한 티커의 가격 데이터가 없습니다. '티커 관리'에서 추가한 뒤 데이터가 수집되면 사용할 수 있습니다.")
                 return None, None, None
         else:
             # --- [수정] auto_adjust=False 옵션을 추가합니다 ---
