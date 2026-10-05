@@ -534,8 +534,9 @@ with st.sidebar.expander("티커 관리"):
 if IS_BROWSER and 'gh' in st.query_params:
     with st.sidebar.expander("GitHub 연결", expanded=True):
         _has_tok = bool(_github_get_token())
-        if _has_tok:
-            st.caption('● 연결됨')
+        st.caption(('● 연결됨. ' if _has_tok else '') +
+                   '토큰은 이 브라우저에만 저장됩니다. 만드는 법: GitHub → Settings → Developer settings → '
+                   'Fine-grained tokens → 저장소 Quantest_v10 만 선택 → Contents: Read and write')
         _tok_in = st.text_input('GitHub 토큰', type='password', placeholder='github_pat_...', key='gh_token_input')
         _c1, _c2 = st.columns(2)
         if _c1.button('저장 및 확인', use_container_width=True):
