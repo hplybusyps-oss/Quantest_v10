@@ -201,6 +201,8 @@ if 'config_to_load' in st.session_state:
     # 복원한 자산군이 전략 기본값으로 덮어써지지 않도록
     if 'tickers' in loaded_config:
         st.session_state['_asset_defaults_for'] = loaded_config.get('strategy_mode', st.session_state.get('sb_strategy_mode', 'HAA'))
+    if 'benchmark' in loaded_config:
+        st.session_state['_benchmark_default_for'] = loaded_config.get('strategy_mode', st.session_state.get('sb_strategy_mode', 'HAA'))
 
     # ── 4. 실행 엔진 설정 ────────────────────────────────────────────────
     if 'backtest_type' in loaded_config:
@@ -300,8 +302,20 @@ monthly_contribution = st.sidebar.number_input(
 st.sidebar.markdown(f"<p style='text-align: right; color: #555; margin-top: -10px;'>{monthly_contribution:,.0f}</p>", unsafe_allow_html=True)
 
 
+STRATEGY_DEFAULT_BENCHMARK = {'HAA': 'SPY', 'A-Core': '360750.KS'}
+
 if etf_df is not None:
     benchmark_options = etf_df['display'].tolist()
+
+    # --- 운용 전략별 벤치마크 기본값: 처음 열 때 / 전략을 바꿨을 때 적용 ---
+    _cur_strategy = st.session_state.get('sb_strategy_mode', 'HAA')
+    if st.session_state.get('_benchmark_default_for') != _cur_strategy:
+        _bm_ticker = STRATEGY_DEFAULT_BENCHMARK.get(_cur_strategy, 'SPY')
+        _bm_display = next((opt for opt in benchmark_options if opt.split(' - ')[0] == _bm_ticker), None)
+        if _bm_display:
+            st.session_state['sidebar_benchmark_display'] = _bm_display
+        st.session_state['_benchmark_default_for'] = _cur_strategy
+
     
     # --- [수정] 벤치마크 위젯을 session_state와 연동 ---
     # 1. session_state에 저장된 값이 있으면 그것을 기본값으로 사용하고, 없으면 'SPY'를 찾습니다.
