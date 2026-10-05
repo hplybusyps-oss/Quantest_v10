@@ -1,7 +1,14 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import sys
+
+# 브라우저(stlite/Pyodide) 실행 여부 — 브라우저에서는 야후 대신 미리 수집된 prices.csv 를 읽는다
+IS_BROWSER = sys.platform == 'emscripten'
+GITHUB_REPO = 'hplybusyps-oss/Quantest_v10'
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import matplotlib.ticker as mtick
@@ -28,6 +35,8 @@ font_name = 'malgun.ttf'
 # __file__은 현재 실행 중인 스크립트의 전체 경로를 의미합니다.
 # 이를 통해 어떤 환경에서든 폰트 파일의 정확한 위치를 찾을 수 있습니다.
 font_path = os.path.join(os.path.dirname(__file__), font_name)
+if not os.path.exists(font_path):
+    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic.ttf')
 
 # 2. 폰트 파일이 실제로 존재하는지 확인합니다.
 if os.path.exists(font_path):
@@ -77,6 +86,74 @@ def load_Stock_list():
     except Exception as e:
         st.error(f"Stock_list.csv 파일을 읽는 중 오류 발생: {e}")
         return None
+
+# --- 브라우저 버전 전용 헬퍼 (가격 파일 / GitHub 저장) ---
+@st.cache_resource
+def _load_all_browser_prices():
+    """GitHub Actions 가 매일 수집한 전 종목 수정종가(Adj Close)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prices.csv')
+    return pd.read_csv(path, index_col=0, parse_dates=True)
+
+
+def _load_browser_prices(tickers, start, end):
+    allp = _load_all_browser_prices()
+    cols = [t for t in tickers if t in allp.columns]
+    p = allp.loc[(allp.index >= pd.to_datetime(start)) & (allp.index <= pd.to_datetime(end)), cols].copy()
+    return p.dropna(axis=1, how='all')
+
+
+def _github_token_path():
+    return '/home/pyodide/persist/github_token'
+
+
+def _github_get_token():
+    try:
+        with open(_github_token_path(), encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception:
+        return ''
+
+
+def _github_request(method, path, body=None):
+    """브라우저 워커에서 동기 XHR 로 GitHub API 호출. (status, json) 반환."""
+    import json
+    from js import XMLHttpRequest
+    xhr = XMLHttpRequest.new()
+    xhr.open(method, f'https://api.github.com/repos/{GITHUB_REPO}{path}', False)
+    xhr.setRequestHeader('Authorization', f'Bearer {_github_get_token()}')
+    xhr.setRequestHeader('Accept', 'application/vnd.github+json')
+    if body is not None:
+        xhr.setRequestHeader('Content-Type', 'application/json')
+        xhr.send(json.dumps(body))
+    else:
+        xhr.send()
+    try:
+        data = json.loads(xhr.responseText) if xhr.responseText else None
+    except Exception:
+        data = None
+    return xhr.status, data
+
+
+def _github_save_stock_list(csv_path, message):
+    """Stock_list.csv 를 저장소에 커밋 → Actions 가 새 티커 데이터를 수집해 재배포."""
+    import base64
+    if not _github_get_token():
+        return False, '이 브라우저에만 임시 반영됨 — 사이드바 GitHub 연결 후 저장하면 데이터가 수집됩니다'
+    with open(csv_path, 'rb') as f:
+        content = base64.b64encode(f.read()).decode()
+    code, info = 0, None
+    for _ in range(2):
+        code, info = _github_request('GET', '/contents/Stock_list.csv?ref=main')
+        sha = info.get('sha') if (code == 200 and isinstance(info, dict)) else None
+        code, info = _github_request('PUT', '/contents/Stock_list.csv',
+                                     {'message': message, 'content': content, 'sha': sha, 'branch': 'main'})
+        if code in (200, 201):
+            return True, 'GitHub 저장 완료 — 약 2~3분 뒤 새로고침하면 새 티커 데이터가 반영됩니다'
+        if code not in (409, 422):
+            break
+    msg = info.get('message', '') if isinstance(info, dict) else ''
+    return False, f'GitHub 저장 실패 ({code} {msg})'
+
 
 # --- [추가] .pkl 파일 로드 시 사이드바 상태를 업데이트하는 로직 ---
 # st.rerun() 후 스크립트가 다시 시작될 때 이 부분이 먼저 실행됩니다.
@@ -356,7 +433,10 @@ with st.sidebar.expander("티커 관리"):
                 warning_msg = ""
                 
                 # 사용자가 이름을 비워둔 경우에만 야후 파이낸스 자동 검색 시도
-                if not new_name:
+                if not new_name and yf is None:
+                    new_name = new_ticker
+                    warning_msg = "\n(⚠️ 브라우저 버전에서는 이름 자동 검색이 안 됩니다. 종목명을 직접 입력하세요.)"
+                elif not new_name:
                     try:
                         ticker_info = yf.Ticker(new_ticker).info
                         fetched_name = ticker_info.get('longName', ticker_info.get('shortName', ''))
@@ -395,6 +475,9 @@ with st.sidebar.expander("티커 관리"):
                         
                         # 기존 코드에 있던 토스트 알림 기능을 활용해 성공/경고 메시지 전달
                         st.session_state.toast_message = f"'{new_name}' ({new_ticker}) 추가 완료! {warning_msg}"
+                        if IS_BROWSER:
+                            _ok, _gh_msg = _github_save_stock_list(csv_path, f'티커 추가: {new_ticker}')
+                            st.session_state.toast_message += f"\n{_gh_msg}"
                         load_Stock_list.clear()
                         
                         st.session_state.temp_selection_agg = st.session_state.get('selected_aggressive', [])
@@ -429,7 +512,10 @@ with st.sidebar.expander("티커 관리"):
                         application_path = os.path.dirname(os.path.abspath(__file__))
                     csv_path = os.path.join(application_path, 'Stock_list.csv')
 
-                    updated_df.to_csv(csv_path, index=False, encoding='utf-8')
+                    updated_df[['Ticker', 'Name']].to_csv(csv_path, index=False, encoding='utf-8')
+                    if IS_BROWSER:
+                        _ok, _gh_msg = _github_save_stock_list(csv_path, f"티커 삭제: {', '.join(tickers_to_delete)}")
+                        st.session_state.toast_message = _gh_msg
                     
                     st.success(f"{len(tickers_to_delete)}개의 티커를 삭제했습니다!")                  
                     load_Stock_list.clear()
@@ -443,6 +529,28 @@ with st.sidebar.expander("티커 관리"):
                     st.error(f"파일 수정 중 오류 발생: {e}")
             else:
                 st.warning("삭제할 티커를 먼저 선택해주세요.")
+
+if IS_BROWSER:
+    with st.sidebar.expander("GitHub 연결 (티커 추가 저장용)", expanded=False):
+        _has_tok = bool(_github_get_token())
+        st.caption(('● 연결됨. ' if _has_tok else '') +
+                   '토큰은 이 브라우저에만 저장됩니다. 만드는 법: GitHub → Settings → Developer settings → '
+                   'Fine-grained tokens → 저장소 Quantest_v10 만 선택 → Contents: Read and write')
+        _tok_in = st.text_input('GitHub 토큰', type='password', placeholder='github_pat_...', key='gh_token_input')
+        _c1, _c2 = st.columns(2)
+        if _c1.button('저장 및 확인', use_container_width=True):
+            if _tok_in.strip():
+                os.makedirs(os.path.dirname(_github_token_path()), exist_ok=True)
+                with open(_github_token_path(), 'w', encoding='utf-8') as _f:
+                    _f.write(_tok_in.strip())
+            _code, _info = _github_request('GET', '')
+            if _code == 200 and isinstance(_info, dict) and _info.get('permissions', {}).get('push'):
+                st.success('연결됨 ✓')
+            else:
+                st.error(f'확인 실패 ({_code}) — 토큰과 Contents 쓰기 권한을 확인하세요')
+        if _has_tok and _c2.button('연결 해제', use_container_width=True):
+            os.remove(_github_token_path())
+            st.rerun()
 
 st.sidebar.header("4. 자산군 설정")
 if etf_df is not None:
@@ -729,34 +837,40 @@ else:
 @st.cache_data(ttl=3600)
 def get_price_data(tickers, start, end, user_start_date):
     try:
-        # --- [수정] auto_adjust=False 옵션을 추가합니다 ---
-        raw_data = yf.download(
-            tickers, 
-            start=start, 
-            end=pd.to_datetime(end) + pd.DateOffset(days=1),  # yfinance end는 exclusive이므로 +1일
-            progress=False,
-            auto_adjust=False  # 이 옵션을 추가하면 'Adj Close' 컬럼이 포함됩니다.
-        )
-        
-        if raw_data.empty: 
-            st.error("데이터를 다운로드하지 못했습니다."); 
-            return None, None, None
-
-        # yfinance MultiIndex 처리: 단일 티커도 MultiIndex를 반환할 수 있음
-        if isinstance(raw_data.columns, pd.MultiIndex):
-            # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
-            if 'Adj Close' in raw_data.columns.get_level_values(0):
-                prices = raw_data['Adj Close'].copy()
-            else:
-                st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
-                prices = raw_data['Close'].copy()
+        if IS_BROWSER:
+            prices = _load_browser_prices(tickers, start, end)
+            if prices.empty or prices.shape[1] == 0:
+                st.error("선택한 티커의 가격 데이터가 없습니다. '티커 관리'에서 추가하면 GitHub 에서 데이터를 수집합니다 (2~3분).")
+                return None, None, None
         else:
-            # 단일 티커이거나 flat 컬럼 구조
-            if 'Adj Close' in raw_data.columns:
-                prices = raw_data['Adj Close'].copy()
+            # --- [수정] auto_adjust=False 옵션을 추가합니다 ---
+            raw_data = yf.download(
+                tickers, 
+                start=start, 
+                end=pd.to_datetime(end) + pd.DateOffset(days=1),  # yfinance end는 exclusive이므로 +1일
+                progress=False,
+                auto_adjust=False  # 이 옵션을 추가하면 'Adj Close' 컬럼이 포함됩니다.
+            )
+        
+            if raw_data.empty: 
+                st.error("데이터를 다운로드하지 못했습니다."); 
+                return None, None, None
+
+            # yfinance MultiIndex 처리: 단일 티커도 MultiIndex를 반환할 수 있음
+            if isinstance(raw_data.columns, pd.MultiIndex):
+                # 'Adj Close'가 있는지 먼저 확인하고, 없으면 'Close'를 사용하는 로직
+                if 'Adj Close' in raw_data.columns.get_level_values(0):
+                    prices = raw_data['Adj Close'].copy()
+                else:
+                    st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
+                    prices = raw_data['Close'].copy()
             else:
-                st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
-                prices = raw_data['Close'].copy()
+                # 단일 티커이거나 flat 컬럼 구조
+                if 'Adj Close' in raw_data.columns:
+                    prices = raw_data['Adj Close'].copy()
+                else:
+                    st.warning("'수정 종가(Adj Close)' 데이터를 일부 티커에서 찾을 수 없어, '종가(Close)'를 기준으로 계산합니다.")
+                    prices = raw_data['Close'].copy()
         
         # 단일 티커인 경우 Series → DataFrame으로 변환
         if isinstance(prices, pd.Series):

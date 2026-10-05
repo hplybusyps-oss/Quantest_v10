@@ -1,0 +1,5 @@
+# 빌드 시 생성/복사되는 파일
+site/prices.csv
+site/Quantest_v10.py
+site/Stock_list.csv
+__pycache__/
