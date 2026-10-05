@@ -2626,7 +2626,7 @@ with tab1:
                     st.session_state.backtest_save_name = default_name
             
                 st.text_input(
-                    "세션에 저장할 이름:",
+                    "저장할 이름 (세션 저장·파일 다운로드 공통):",
                     key='backtest_save_name'
                 )
                 
@@ -2655,18 +2655,36 @@ with tab1:
                 st.write(" ") 
                 st.write(" ")
                 
-                result_binary = pickle.dumps(st.session_state['results'])
-                file_name_suggestion = st.session_state.get('backtest_save_name', default_name)
-        
-                st.download_button(
-                    label="파일로 다운로드",
-                    data=result_binary,
-                    file_name=f"{file_name_suggestion}.pkl",
-                    mime="application/octet-stream",
-                    help="현재 백테스트 결과를 내 컴퓨터에 .pkl 파일로 영구 저장합니다."
-                )
+                # st.download_button 은 이름을 바꾼 직후 바로 누르면 이전 이름으로 저장되는 문제가 있어
+                # (버튼이 이전 화면의 파일명을 들고 있음), 누르는 순간 확정된 이름으로 파일을 만들어 내려받는다.
+                if st.button("파일로 다운로드", help="현재 백테스트 결과를 내 컴퓨터에 .pkl 파일로 영구 저장합니다."):
+                    import base64 as _b64
+                    import re as _re
+                    import json as _json
+                    import streamlit.components.v1 as _components
+                    _name = str(st.session_state.get('backtest_save_name') or default_name).strip() or default_name
+                    _file_name = _re.sub(r'[\\/:*?"<>|]+', '_', _name) + '.pkl'
+                    result_binary = pickle.dumps(st.session_state['results'])
+                    _components.html(f"""<script>
+                      const bin = atob("{_b64.b64encode(result_binary).decode()}");
+                      const buf = new Uint8Array(bin.length);
+                      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+                      const doc = window.parent.document;
+                      const a = doc.createElement('a');
+                      a.href = URL.createObjectURL(new Blob([buf], {{type: 'application/octet-stream'}}));
+                      a.download = {_json.dumps(_file_name)};
+                      doc.body.appendChild(a); a.click(); a.remove();
+                      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                    </script>""", height=0)
+                    # 자동 다운로드가 막힌 브라우저용 (이 시점에는 이름이 확정되어 있음)
+                    st.download_button(
+                        label=f"⬇ '{_file_name}' 다운로드가 시작되지 않으면 클릭",
+                        data=result_binary,
+                        file_name=_file_name,
+                        mime="application/octet-stream",
+                    )
 
-                
+
 # --- 2단계: 결과 비교 탭 (업그레이드 버전) ---
 with tab2:
     st.header("📊 세션 결과 및 업로드 파일 비교")
